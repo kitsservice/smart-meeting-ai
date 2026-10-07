@@ -1,0 +1,32 @@
+# General
+.idea/
+.DS_Store
+
+# Scratch Scripts
+*.py
+*.dart
+!backend/**/*.py
+!frontend/**/*.dart
+
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/temp_audio/
+backend/pretrained_models/
+backend/.env
+backend/*.wav
+backend/*.mp3
+
+# Frontend
+frontend/.dart_tool/
+frontend/build/
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/macos/Pods/
+frontend/macos/Flutter/ephemeral/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
