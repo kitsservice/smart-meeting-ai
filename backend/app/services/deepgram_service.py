@@ -99,17 +99,18 @@ class DeepgramAIService:
             return f"Error during transcription: {e}"
 
     async def generate_summary(self, transcript: str) -> dict:
-        if not settings.OPENAI_API_KEY:
+        if not settings.GEMINI_API_KEY:
             return {
-                "summary": "Please add OPENAI_API_KEY to your .env file to enable summaries.",
+                "summary": "Please add GEMINI_API_KEY to your Render environment variables to enable summaries.",
                 "action_items": []
             }
             
         try:
-            from openai import AsyncOpenAI
+            from google import genai
+            from google.genai import types
             import json
 
-            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
             
             prompt = f"""
             You are a professional secretary and meeting analyzer.
@@ -132,16 +133,26 @@ class DeepgramAIService:
             }}
             """
             
-            response = await client.chat.completions.create(
-                model='gpt-3.5-turbo',
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={ "type": "json_object" },
-                temperature=0.7,
-            )
+            from fastapi.concurrency import run_in_threadpool
             
-            content = response.choices[0].message.content
+            def call_gemini():
+                return client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                    )
+                )
+                
+            response = await run_in_threadpool(call_gemini)
+            
+            content = response.text
+            # Remove any markdown JSON wrapping if present
+            if content.startswith("```json"):
+                content = content[7:-3]
+            elif content.startswith("```"):
+                content = content[3:-3]
+                
             data = json.loads(content)
             
             return {
@@ -150,7 +161,7 @@ class DeepgramAIService:
             }
             
         except Exception as e:
-            print(f"OpenAI Error: {e}")
+            print(f"Gemini Error: {e}")
             return {
                 "summary": f"Failed to generate summary: {e}",
                 "action_items": []
