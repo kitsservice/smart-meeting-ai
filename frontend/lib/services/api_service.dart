@@ -6,10 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class ApiService {
   // Use 10.0.2.2 for Android Emulators to connect to Windows localhost
   static String get baseUrl {
-    if (Platform.isAndroid) {
-      return 'http://192.168.1.11:8000/api/v1';
-    }
-    return 'http://127.0.0.1:8000/api/v1';
+    return 'https://smart-meeting-ai-7qub.onrender.com/api/v1';
   }
 
   static final ApiService _instance = ApiService._internal();
