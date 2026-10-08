@@ -6,15 +6,18 @@ import '../services/api_service.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-class MeetingDetailsScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/meetings_provider.dart';
+
+class MeetingDetailsScreen extends ConsumerStatefulWidget {
   final int initialTabIndex;
   const MeetingDetailsScreen({super.key, this.initialTabIndex = 0});
 
   @override
-  State<MeetingDetailsScreen> createState() => _MeetingDetailsScreenState();
+  ConsumerState<MeetingDetailsScreen> createState() => _MeetingDetailsScreenState();
 }
 
-class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
+class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
   Map<String, dynamic>? _fullMeeting;
   bool _isLoading = true;
   List<String> _meetingNotes = [];
@@ -71,7 +74,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                   shape: BoxShape.rectangle,
                   borderRadius: const BorderRadius.all(Radius.circular(999)),
                 ),
-                child: Icon(Icons.speaker_notes_off_rounded, size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
+                child: Icon(Icons.speaker_notes_off_rounded, size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -146,10 +149,10 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: currentSpeakerColor.withOpacity(0.12),
+                    color: currentSpeakerColor.withValues(alpha: 0.12),
                     shape: BoxShape.rectangle,
                     borderRadius: const BorderRadius.all(Radius.circular(999)),
-                    border: Border.all(color: currentSpeakerColor.withOpacity(0.2), width: 1),
+                    border: Border.all(color: currentSpeakerColor.withValues(alpha: 0.2), width: 1),
                   ),
                   child: Center(
                     child: Text(
@@ -187,7 +190,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                             Text(
                               time,
                               style: TextStyle(
-                                color: AppTheme.textSecondary.withOpacity(0.6),
+                                color: AppTheme.textSecondary.withValues(alpha: 0.6),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -227,7 +230,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
         Padding(
           padding: const EdgeInsets.all(24.0),
           child: ElevatedButton.icon(
-            onPressed: _showAddNoteDialog,
+            onPressed: () => _showNoteDialog(),
             icon: const Icon(Icons.add_rounded, size: 22),
             label: const Text(
               'Add New Note',
@@ -253,13 +256,13 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.08),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.08),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.edit_document,
                           size: 48,
-                          color: AppTheme.primaryColor.withOpacity(0.8),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.8),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -290,84 +293,88 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                   itemCount: _meetingNotes.length,
                   itemBuilder: (context, index) {
                     final note = _meetingNotes[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.dividerColor,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+                    return InkWell(
+                      onTap: () => _showNoteDialog(index: index),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppTheme.dividerColor,
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.push_pin_rounded,
-                                  color: AppTheme.primaryColor,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Meeting Note',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.primaryColor,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const Spacer(),
-                              InkWell(
-                                borderRadius: BorderRadius.circular(50),
-                                onTap: () async {
-                                  final prefs = await SharedPreferences.getInstance();
-                                  final id = _fullMeeting!['id'].toString();
-                                  setState(() {
-                                    _meetingNotes.removeAt(index);
-                                  });
-                                  await prefs.setStringList(
-                                    'meeting_notes_$id',
-                                    _meetingNotes,
-                                  );
-                                },
-                                child: const Padding(
-                                  padding: EdgeInsets.all(4.0),
-                                  child: Icon(
-                                    Icons.delete_outline_rounded,
-                                    color: AppTheme.dangerColor,
-                                    size: 22,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.push_pin_rounded,
+                                    color: AppTheme.primaryColor,
+                                    size: 18,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            note,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              color: AppTheme.textPrimary,
-                              height: 1.6,
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Meeting Note',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const Spacer(),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(50),
+                                  onTap: () async {
+                                    final prefs = await SharedPreferences.getInstance();
+                                    final id = _fullMeeting!['id'].toString();
+                                    setState(() {
+                                      _meetingNotes.removeAt(index);
+                                    });
+                                    await prefs.setStringList(
+                                      'meeting_notes_$id',
+                                      _meetingNotes,
+                                    );
+                                  },
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4.0),
+                                    child: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: AppTheme.dangerColor,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            Text(
+                              note,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: AppTheme.textPrimary,
+                                height: 1.6,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -377,8 +384,8 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
     );
   }
 
-  void _showAddNoteDialog() {
-    String tempNote = '';
+  void _showNoteDialog({int? index}) {
+    String tempNote = index != null ? _meetingNotes[index] : '';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -399,9 +406,9 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'New Note',
-                style: TextStyle(
+              Text(
+                index != null ? 'Edit Note' : 'New Note',
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textPrimary,
@@ -420,13 +427,14 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                   border: Border.all(color: AppTheme.dividerColor, width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: TextField(
+                child: TextFormField(
+                  initialValue: tempNote,
                   autofocus: true,
                   maxLines: 5,
                   onChanged: (val) => tempNote = val,
@@ -438,7 +446,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                   decoration: InputDecoration(
                     hintText: 'Jot down an important point...',
                     hintStyle: TextStyle(
-                      color: AppTheme.textSecondary.withOpacity(0.6),
+                      color: AppTheme.textSecondary.withValues(alpha: 0.6),
                     ),
                     border: InputBorder.none,
                   ),
@@ -449,10 +457,19 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (tempNote.trim().isNotEmpty) {
-                      _saveNote(tempNote);
-                      Navigator.pop(context);
+                      if (index != null) {
+                        final prefs = await SharedPreferences.getInstance();
+                        final id = _fullMeeting!['id'].toString();
+                        setState(() {
+                          _meetingNotes[index] = tempNote.trim();
+                        });
+                        await prefs.setStringList('meeting_notes_$id', _meetingNotes);
+                      } else {
+                        _saveNote(tempNote);
+                      }
+                      if (context.mounted) Navigator.pop(context);
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -462,9 +479,9 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'Save Note',
-                    style: TextStyle(
+                  child: Text(
+                    index != null ? 'Update Note' : 'Save Note',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -588,8 +605,11 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                     final success = await ApiService().deleteMeeting(
                       meetingId.toString(),
                     );
-                    if (success && context.mounted) {
-                      Navigator.pop(context, true);
+                    if (success) {
+                      ref.read(meetingsProvider.notifier).fetchMeetings();
+                      if (context.mounted) {
+                        Navigator.pop(context, true);
+                      }
                     }
                   }
                 },
@@ -621,7 +641,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
@@ -714,7 +734,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
+                          color: Colors.black.withValues(alpha: 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
