@@ -1,11 +1,11 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
-fastapi==0.103.1
-uvicorn==0.23.2
-supabase==2.3.0
-python-dotenv==1.0.0
-pydantic==2.4.2
-pydantic-settings==2.0.3
-httpx<0.25.0
+fastapi
+uvicorn
+supabase
+python-dotenv
+pydantic
+pydantic-settings
+httpx
 torch
 torchaudio
 speechbrain
