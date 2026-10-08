@@ -12,3 +12,4 @@ speechbrain
 scipy
 soundfile
 google-genai
+python-multipart
