@@ -4,6 +4,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_calendar/device_calendar.dart' as dc;
 import '../theme/app_theme.dart';
+import '../services/notification_service.dart';
 
 class ScheduledEvent {
   final String title;
@@ -282,6 +283,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           });
 
                           _saveEvents();
+                          LocalNotificationService().scheduleMeetingNotifications(
+                            event.title, 
+                            event.date,
+                          );
                           Navigator.pop(context); // Close modal
                         }
                       },
@@ -386,14 +391,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primaryColor.withOpacity(0.3),
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 todayDecoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.2),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.2),
                   shape: BoxShape.rectangle,
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -406,13 +411,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   fontWeight: FontWeight.w600,
                 ),
                 weekendTextStyle: TextStyle(
-                  color: AppTheme.textSecondary.withOpacity(0.8),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.8),
                   fontWeight: FontWeight.w600,
                 ),
                 outsideDaysVisible: false,
                 markerDecoration: const BoxDecoration(
                   color: AppTheme.accentColor,
-                  borderRadius: const BorderRadius.all(Radius.circular(999)),
+                  borderRadius: BorderRadius.all(Radius.circular(999)),
                 ),
                 markersMaxCount: 1,
               ),
@@ -425,7 +430,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   fontWeight: FontWeight.bold,
                 ),
                 formatButtonDecoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.all(Radius.circular(12)),
                 ),
                 titleCentered: true,
@@ -495,7 +500,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 15,
                       offset: const Offset(0, -5),
                     ),
@@ -565,13 +570,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: AppTheme.dividerColor.withOpacity(
+                                      color: AppTheme.dividerColor.withValues(alpha: 
                                         0.5,
                                       ),
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.03),
+                                        color: Colors.black.withValues(alpha: 0.03),
                                         blurRadius: 10,
                                         offset: const Offset(0, 4),
                                       ),
@@ -583,7 +588,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: AppTheme.primaryColor
-                                              .withOpacity(0.1),
+                                              .withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(
                                             14,
                                           ),
@@ -618,7 +623,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                                   Icons.access_time_rounded,
                                                   size: 14,
                                                   color: AppTheme.textSecondary
-                                                      .withOpacity(0.8),
+                                                      .withValues(alpha: 0.8),
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(

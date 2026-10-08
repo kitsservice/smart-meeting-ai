@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -93,7 +92,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
             borderRadius: BorderRadius.circular(4),
             boxShadow: [
               BoxShadow(
-                color: Colors.white.withOpacity(0.8 * scale),
+                color: Colors.white.withValues(alpha: 0.8 * scale),
                 blurRadius: 10 * scale,
                 spreadRadius: 2 * scale,
               ),
@@ -133,16 +132,16 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 36),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                     shape: BoxShape.rectangle,
                     borderRadius: const BorderRadius.all(Radius.circular(999)),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF4364F7).withOpacity(0.3),
+                        color: const Color(0xFF4364F7).withValues(alpha: 0.3),
                         blurRadius: 40,
                         spreadRadius: 10,
                       ),
@@ -200,7 +199,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -212,7 +211,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   child: CircularProgressIndicator(
                     strokeWidth: 3,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      Colors.white.withOpacity(0.8),
+                      Colors.white.withValues(alpha: 0.8),
                     ),
                   ),
                 ),

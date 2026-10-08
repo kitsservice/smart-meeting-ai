@@ -13,8 +13,12 @@ import 'screens/my_profile_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/help_support_screen.dart';
 
+import 'services/notification_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await LocalNotificationService().init();
 
   await Supabase.initialize(
     url: 'https://dhrqllyezfwchvbeshpr.supabase.co',

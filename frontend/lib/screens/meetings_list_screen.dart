@@ -90,7 +90,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 16,
                     offset: const Offset(0, 4),
                   ),
@@ -114,7 +114,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -125,7 +125,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                   ),
                   hintText: 'Ask AI about your meetings...',
                   hintStyle: TextStyle(
-                    color: AppTheme.textSecondary.withOpacity(0.7),
+                    color: AppTheme.textSecondary.withValues(alpha: 0.7),
                     fontSize: 15,
                   ),
                   border: InputBorder.none,
@@ -313,84 +313,96 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
             }
           },
           child: Container(
-            margin: const EdgeInsets.only(bottom: 12), // Reduced from 16
-            padding: const EdgeInsets.all(16), // Reduced from 20
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.dividerColor, width: 1.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.dividerColor.withValues(alpha: 0.6), width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
-                  blurRadius: 10, // Reduced from 12
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10), // Reduced from 12
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.groups_rounded,
                     color: AppTheme.primaryColor,
-                    size: 22, // Reduced from 24
+                    size: 20,
                   ),
                 ),
-                const SizedBox(width: 14), // Reduced from 16
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         title,
                         style: const TextStyle(
-                          fontSize: 16, // Reduced from 17
-                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
                           color: AppTheme.textPrimary,
-                          letterSpacing: -0.3,
+                          letterSpacing: -0.2,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4), // Reduced from 6
+                      const SizedBox(height: 2),
                       Text(
-                        '$dateStr$durationText', // REAL original data
+                        '$dateStr$durationText',
                         style: const TextStyle(
-                          fontSize: 12, // Reduced from 13
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: AppTheme.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 8), // Reduced from 12
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.auto_awesome,
-                            color: AppTheme.accentColor,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4), // Reduced from 6
-                          Text(
-                            'AI Summary Available',
-                            style: TextStyle(
-                              fontSize: 11, // Reduced from 12
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.accentColor,
-                            ),
-                          ),
-                        ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome,
+                        color: AppTheme.accentColor,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'AI',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.accentColor,
+                        ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 const Icon(
                   Icons.arrow_forward_ios_rounded,
                   color: AppTheme.textSecondary,
-                  size: 16,
+                  size: 14,
                 ),
               ],
             ),

@@ -211,7 +211,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                 ? AppTheme
                       .primaryColor // Professional Corporate Blue highlight
                 : (_isRecording
-                      ? AppTheme.textPrimary.withOpacity(0.3)
+                      ? AppTheme.textPrimary.withValues(alpha: 0.3)
                       : AppTheme.textPrimary),
             height: 1.6,
           ),
@@ -244,7 +244,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: const BorderRadius.all(Radius.circular(999)),
                     ),
                     child: const Icon(
@@ -269,7 +269,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 15,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       height: 1.4,
                     ),
                   ),
@@ -293,25 +293,25 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                           padding: const EdgeInsets.all(32),
                           decoration: BoxDecoration(
                             color: _isRecording
-                                ? Colors.red.withOpacity(0.05)
+                                ? Colors.red.withValues(alpha: 0.05)
                                 : Colors.white,
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                               color: _isRecording
-                                  ? Colors.red.withOpacity(
+                                  ? Colors.red.withValues(alpha: 
                                       0.5 + (_animationController.value * 0.5),
                                     )
-                                  : AppTheme.primaryColor.withOpacity(0.1),
+                                  : AppTheme.primaryColor.withValues(alpha: 0.1),
                               width: _isRecording ? 2.0 : 1.0,
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: _isRecording
-                                    ? Colors.red.withOpacity(
+                                    ? Colors.red.withValues(alpha: 
                                         0.1 +
                                             (_animationController.value * 0.2),
                                       )
-                                    : AppTheme.primaryColor.withOpacity(0.05),
+                                    : AppTheme.primaryColor.withValues(alpha: 0.05),
                                 blurRadius: 30,
                                 spreadRadius: _isRecording
                                     ? (_animationController.value * 10)
@@ -326,8 +326,8 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                                 Icons.format_quote_rounded,
                                 size: 40,
                                 color: _isRecording
-                                    ? Colors.red.withOpacity(0.5)
-                                    : AppTheme.primaryColor.withOpacity(0.3),
+                                    ? Colors.red.withValues(alpha: 0.5)
+                                    : AppTheme.primaryColor.withValues(alpha: 0.3),
                               ),
                               const SizedBox(height: 16),
                               RichText(
@@ -361,7 +361,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                               boxShadow: [
                                 if (_isRecording)
                                   BoxShadow(
-                                    color: Colors.red.withOpacity(
+                                    color: Colors.red.withValues(alpha: 
                                       0.3 + (_animationController.value * 0.4),
                                     ),
                                     spreadRadius:
@@ -370,7 +370,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                                   ),
                                 if (!_isRecording)
                                   BoxShadow(
-                                    color: AppTheme.primaryColor.withOpacity(
+                                    color: AppTheme.primaryColor.withValues(alpha: 
                                       0.3,
                                     ),
                                     spreadRadius: 4,
@@ -422,7 +422,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                           gradient: AppTheme.primaryGradient,
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.primaryColor.withOpacity(0.3),
+                              color: AppTheme.primaryColor.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),

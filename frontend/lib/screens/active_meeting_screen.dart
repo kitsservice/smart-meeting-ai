@@ -123,7 +123,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -162,7 +162,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        backgroundColor: Colors.white.withOpacity(0.05),
+                        backgroundColor: Colors.white.withValues(alpha: 0.05),
                       ),
                       child: const Text(
                         'Discard',
@@ -303,7 +303,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                     center: Alignment.center,
                     radius: isRecording ? 1.5 : 1.0,
                     colors: [
-                      AppTheme.primaryColor.withOpacity(
+                      AppTheme.primaryColor.withValues(alpha: 
                         isRecording ? 0.2 : 0.05,
                       ),
                       AppTheme.darkSurface,
@@ -323,9 +323,9 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -342,7 +342,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                             boxShadow: isRecording
                                 ? [
                                     BoxShadow(
-                                      color: AppTheme.dangerColor.withOpacity(
+                                      color: AppTheme.dangerColor.withValues(alpha: 
                                         0.6,
                                       ),
                                       blurRadius: 8,
@@ -407,14 +407,14 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                           decoration: BoxDecoration(
                                             borderRadius: const BorderRadius.all(Radius.circular(999)),
                                             color: AppTheme.primaryColor
-                                                .withOpacity(
+                                                .withValues(alpha: 
                                                   isRecording
                                                       ? (1.0 - value) * 0.15
                                                       : 0,
                                                 ),
                                             border: Border.all(
                                               color: AppTheme.primaryColor
-                                                  .withOpacity(
+                                                  .withValues(alpha: 
                                                     isRecording
                                                         ? (1.0 - value) * 0.3
                                                         : 0,
@@ -432,15 +432,15 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                     height: 120,
                                     decoration: BoxDecoration(
                                       borderRadius: const BorderRadius.all(Radius.circular(999)),
-                                      color: Colors.white.withOpacity(0.05),
+                                      color: Colors.white.withValues(alpha: 0.05),
                                       border: Border.all(
-                                        color: Colors.white.withOpacity(0.1),
+                                        color: Colors.white.withValues(alpha: 0.1),
                                         width: 1.5,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
                                           color: AppTheme.primaryColor
-                                              .withOpacity(0.2),
+                                              .withValues(alpha: 0.2),
                                           blurRadius: 40,
                                           spreadRadius: 10,
                                         ),
@@ -472,12 +472,12 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                       vertical: 20,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 30,
                           offset: const Offset(0, 10),
                         ),
@@ -491,7 +491,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                               ? Icons.pause_rounded
                               : Icons.play_arrow_rounded,
                           isRecording ? 'Pause' : 'Resume',
-                          Colors.white.withOpacity(0.1),
+                          Colors.white.withValues(alpha: 0.1),
                           Colors.white,
                           _pauseOrResumeRecording,
                         ),
@@ -505,7 +505,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                 width: 72,
                                 height: 72,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.dangerColor.withOpacity(0.2),
+                                  color: AppTheme.dangerColor.withValues(alpha: 0.2),
                                   borderRadius: const BorderRadius.all(Radius.circular(999)),
                                   border: Border.all(
                                     color: AppTheme.dangerColor,
@@ -513,7 +513,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: AppTheme.dangerColor.withOpacity(
+                                      color: AppTheme.dangerColor.withValues(alpha: 
                                         0.3,
                                       ),
                                       blurRadius: 16,
@@ -542,7 +542,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                         _buildControlButton(
                           Icons.edit_note_rounded,
                           'Add Note',
-                          Colors.white.withOpacity(0.1),
+                          Colors.white.withValues(alpha: 0.1),
                           Colors.white,
                           _showAddNoteDialog,
                         ),
@@ -612,7 +612,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -630,9 +630,9 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: 'Type important points here...',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
+                    fillColor: Colors.white.withValues(alpha: 0.05),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
@@ -136,7 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.primaryColor.withOpacity(0.05),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.05),
                           blurRadius: 15,
                           offset: const Offset(0, 4),
                         ),
@@ -182,7 +183,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.primaryColor.withOpacity(
+                                  color: AppTheme.primaryColor.withValues(alpha: 
                                     0.05,
                                   ),
                                   blurRadius: 15,
@@ -229,7 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.primaryColor.withOpacity(
+                                  color: AppTheme.primaryColor.withValues(alpha: 
                                     0.05,
                                   ),
                                   blurRadius: 15,
@@ -270,7 +271,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.primaryColor.withOpacity(0.3),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -348,6 +349,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // RIVERPOD STATE INJECTION
     final meetingsState = ref.watch(meetingsProvider);
     final meetingCount = meetingsState.value?.length ?? 0;
+    
+    int summaryCount = 0;
+    int pendingTasksCount = 0;
+    if (meetingsState.value != null) {
+      for (var m in meetingsState.value!) {
+        if (m['summary'] != null && m['summary'].toString().trim().isNotEmpty) {
+          summaryCount++;
+        }
+        if (m['action_items'] != null && m['action_items'] is List) {
+          for (var item in m['action_items']) {
+            if (item is Map && item['is_completed'] == false) {
+              pendingTasksCount++;
+            }
+          }
+        }
+      }
+    }
 
     final notifications = ref.watch(notificationsProvider);
     final hasUnread = ref.watch(notificationsProvider.notifier).hasUnread;
@@ -373,7 +391,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.primaryColor.withOpacity(0.3),
+                              color: AppTheme.primaryColor.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -403,7 +421,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
-                              color: AppTheme.textSecondary.withOpacity(0.8),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.8),
                               letterSpacing: 0.2,
                             ),
                           ),
@@ -464,13 +482,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           decoration: BoxDecoration(
                             borderRadius: const BorderRadius.all(Radius.circular(999)),
                             border: Border.all(
-                              color: AppTheme.primaryColor.withOpacity(0.2),
+                              color: AppTheme.primaryColor.withValues(alpha: 0.2),
                               width: 2,
                             ),
                           ),
                           child: CircleAvatar(
                             radius: 18,
-                            backgroundColor: AppTheme.primaryColor.withOpacity(
+                            backgroundColor: AppTheme.primaryColor.withValues(alpha: 
                               0.1,
                             ),
                             child: const Icon(
@@ -557,7 +575,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     borderRadius: BorderRadius.circular(20), // Reduced from 24
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.primaryColor.withOpacity(0.3),
+                        color: AppTheme.primaryColor.withValues(alpha: 0.3),
                         blurRadius: 16, // Reduced from 24
                         offset: const Offset(0, 8), // Reduced from 12
                       ),
@@ -575,7 +593,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           height: 100,
                           decoration: BoxDecoration(
                             borderRadius: const BorderRadius.all(Radius.circular(999)),
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withValues(alpha: 0.1),
                           ),
                         ),
                       ),
@@ -590,12 +608,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 12,
                               ), // Reduced from 16
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(
                                   16,
                                 ), // Reduced from 20
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.5),
+                                  color: Colors.white.withValues(alpha: 0.5),
                                   width: 1,
                                 ),
                               ),
@@ -637,7 +655,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             padding: const EdgeInsets.all(8), // Reduced from 10
                             decoration: const BoxDecoration(
                               color: Colors.white,
-                              borderRadius: const BorderRadius.all(Radius.circular(999)),
+                              borderRadius: BorderRadius.all(Radius.circular(999)),
                             ),
                             child: const Icon(
                               Icons.arrow_forward_rounded,
@@ -674,7 +692,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     Icons.text_snippet_rounded,
                     'Summaries',
                     'Get AI-powered summaries and key insights',
-                    '$meetingCount generated',
+                    '$summaryCount generated',
                     AppTheme.accentColor,
                     () => setState(() => _currentIndex = 1),
                   ),
@@ -682,7 +700,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     Icons.check_circle_outline_rounded,
                     'Action Items',
                     'Track your tasks and never miss anything',
-                    '12 pending',
+                    '$pendingTasksCount pending',
                     const Color(0xFFF59E0B),
                     () => Navigator.push(
                       context,
@@ -695,16 +713,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     Icons.edit_document,
                     'Notes',
                     'Capture important points and ideas',
-                    _manualNotes.isNotEmpty
-                        ? '${_manualNotes.length} notes'
-                        : '28 notes',
+                    '${_manualNotes.length} notes',
                     const Color(0xFF8B5CF6), // Purple color from the UI image
                     () => setState(() => _currentIndex = 1),
                   ),
-                ],
+                ].animate(interval: 100.ms).fade(duration: 500.ms).scale(begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack),
               ),
               const SizedBox(height: 20),
-            ],
+            ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuart),
           ),
         ),
       ),
@@ -741,7 +757,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -813,7 +829,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         ' saved ',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
                       ),
                     ],
@@ -822,7 +838,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: const BorderRadius.all(Radius.circular(999)),
                   ),
                   child: const Icon(
@@ -846,7 +862,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           height: 160,
                           decoration: BoxDecoration(
                             borderRadius: const BorderRadius.all(Radius.circular(999)),
-                            color: AppTheme.primaryColor.withOpacity(0.08),
+                            color: AppTheme.primaryColor.withValues(alpha: 0.08),
                           ),
                           child: Stack(
                             alignment: Alignment.center,
@@ -855,7 +871,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               Icon(
                                 Icons.edit_document,
                                 size: 80,
-                                color: AppTheme.primaryColor.withOpacity(0.8),
+                                color: AppTheme.primaryColor.withValues(alpha: 0.8),
                               ),
                               Positioned(
                                 top: 20,
@@ -912,7 +928,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           border: Border.all(color: AppTheme.dividerColor),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.02),
+                              color: Colors.black.withValues(alpha: 0.02),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -927,7 +943,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.accentColor.withOpacity(
+                                    color: AppTheme.accentColor.withValues(alpha: 
                                       0.15,
                                     ),
                                     borderRadius: BorderRadius.circular(10),
@@ -944,7 +960,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                   child: Container(
                                     padding: const EdgeInsets.all(6),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.dangerColor.withOpacity(
+                                      color: AppTheme.dangerColor.withValues(alpha: 
                                         0.1,
                                       ),
                                       borderRadius: const BorderRadius.all(Radius.circular(999)),
@@ -1103,7 +1119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: const BorderRadius.all(Radius.circular(999)),
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
                   ),
                   child: const CircleAvatar(
                     radius: 46,
@@ -1128,7 +1144,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 Text(
                   userEmail,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 15,
                   ),
                 ),
@@ -1250,13 +1266,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: isLogout ? AppTheme.dangerColor.withOpacity(0.05) : Colors.white,
+        color: isLogout ? AppTheme.dangerColor.withValues(alpha: 0.05) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: isLogout
             ? []
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: Colors.black.withValues(alpha: 0.02),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -1268,7 +1284,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: color, size: 24),
@@ -1372,12 +1388,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           color: isDarkMode ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: AppTheme.dividerColor.withOpacity(isDarkMode ? 0.1 : 0.4),
+            color: AppTheme.dividerColor.withValues(alpha: isDarkMode ? 0.1 : 0.4),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.05),
+              color: color.withValues(alpha: 0.05),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -1394,7 +1410,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 height: 120,
                 decoration: BoxDecoration(
                   borderRadius: const BorderRadius.all(Radius.circular(999)),
-                  color: color.withOpacity(0.08),
+                  color: color.withValues(alpha: 0.08),
                 ),
               ),
             ),
@@ -1406,7 +1422,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 height: 80,
                 decoration: BoxDecoration(
                   borderRadius: const BorderRadius.all(Radius.circular(999)),
-                  color: color.withOpacity(0.05),
+                  color: color.withValues(alpha: 0.05),
                 ),
               ),
             ),
@@ -1430,7 +1446,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       Icon(
                         Icons.arrow_forward_ios_rounded,
-                        color: AppTheme.textSecondary.withOpacity(0.5),
+                        color: AppTheme.textSecondary.withValues(alpha: 0.5),
                         size: 14,
                       ),
                     ],
@@ -1464,7 +1480,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.15),
+                      color: color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -1558,7 +1574,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.02),
+                                      color: Colors.black.withValues(alpha: 0.02),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -1571,7 +1587,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
                                         color: AppTheme.primaryColor
-                                            .withOpacity(0.1),
+                                            .withValues(alpha: 0.1),
                                         borderRadius: const BorderRadius.all(Radius.circular(999)),
                                       ),
                                       child: const Icon(

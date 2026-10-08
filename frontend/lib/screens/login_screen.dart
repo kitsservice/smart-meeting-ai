@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -307,7 +306,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1D4ED8).withOpacity(0.3),
+                          color: const Color(0xFF1D4ED8).withValues(alpha: 0.3),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -376,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 24,
                           offset: const Offset(0, 8),
                         ),
@@ -747,7 +746,7 @@ class WavesPainter extends CustomPainter {
     
     // Top Left Wave
     final Paint paint1 = Paint()
-      ..color = const Color(0xFFD6E4FF).withOpacity(0.6)
+      ..color = const Color(0xFFD6E4FF).withValues(alpha: 0.6)
       ..style = PaintingStyle.fill;
     
     final path1 = Path();
@@ -762,7 +761,7 @@ class WavesPainter extends CustomPainter {
 
     // Top Right Wave
     final Paint paint2 = Paint()
-      ..color = const Color(0xFFD6E4FF).withOpacity(0.4)
+      ..color = const Color(0xFFD6E4FF).withValues(alpha: 0.4)
       ..style = PaintingStyle.fill;
     
     final path2 = Path();
@@ -777,7 +776,7 @@ class WavesPainter extends CustomPainter {
 
     // Bottom Waves
     final Paint paint3 = Paint()
-      ..color = const Color(0xFFD6E4FF).withOpacity(0.5)
+      ..color = const Color(0xFFD6E4FF).withValues(alpha: 0.5)
       ..style = PaintingStyle.fill;
       
     final path3 = Path();
@@ -797,7 +796,7 @@ class WavesPainter extends CustomPainter {
     
     // Bottom Wave 2 (darker)
     final Paint paint4 = Paint()
-      ..color = const Color(0xFFADC8FF).withOpacity(0.6)
+      ..color = const Color(0xFFADC8FF).withValues(alpha: 0.6)
       ..style = PaintingStyle.fill;
       
     final path4 = Path();
