@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,68 +17,61 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isLogin = true; // Toggle between Login and Sign Up
-  bool _rememberMe = true;
   bool _obscurePassword = true;
 
   late final StreamSubscription<AuthState> _authSubscription;
+  bool _isNavigating = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedCredentials();
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) async {
       final AuthChangeEvent event = data.event;
       if (event == AuthChangeEvent.signedIn) {
-        if (!mounted) return;
-        try {
-          final user = data.session?.user;
-          if (user != null) {
-            final profile = await Supabase.instance.client
-                .from('users')
-                .select('voice_profile_url')
-                .eq('id', user.id)
-                .single();
-            if (profile['voice_profile_url'] == null ||
-                profile['voice_profile_url'].toString().isEmpty) {
-              Navigator.pushReplacementNamed(context, '/voice_setup');
-            } else {
-              Navigator.pushReplacementNamed(context, '/home');
-            }
-          }
-        } catch (e) {
-          Navigator.pushReplacementNamed(context, '/voice_setup');
+        final user = data.session?.user;
+        if (user != null && !_isLoading && !_isNavigating) {
+          _navigateAfterAuth(user.id);
         }
       }
+    },
+    onError: (error) {
+      debugPrint('Supabase Auth state error: $error');
     });
   }
 
-  Future<void> _loadSavedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedEmail = prefs.getString('saved_email');
-    final savedPassword = prefs.getString('saved_password');
-    if (savedEmail != null && savedPassword != null) {
-      setState(() {
-        _emailController.text = savedEmail;
-        _passwordController.text = savedPassword;
-        _rememberMe = true;
-      });
-    }
-  }
-
-  Future<void> _saveOrClearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_rememberMe) {
-      await prefs.setString('saved_email', _emailController.text.trim());
-      await prefs.setString('saved_password', _passwordController.text);
-    } else {
-      await prefs.remove('saved_email');
-      await prefs.remove('saved_password');
+  Future<void> _navigateAfterAuth(String userId) async {
+    if (_isNavigating || !mounted) return;
+    _isNavigating = true;
+    try {
+      final profile = await Supabase.instance.client
+          .from('users')
+          .select('voice_profile_url, voice_embedding')
+          .eq('id', userId)
+          .maybeSingle();
+      if (!mounted) return;
+      final hasVoiceProfile = profile != null &&
+          ((profile['voice_profile_url'] != null &&
+                  profile['voice_profile_url'].toString().isNotEmpty) ||
+              (profile['voice_embedding'] != null));
+      if (!hasVoiceProfile) {
+        Navigator.pushReplacementNamed(context, '/voice_setup');
+      } else {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/voice_setup');
     }
   }
 
   @override
   void dispose() {
     _authSubscription.cancel();
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -98,56 +91,109 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (_isLogin) {
-        await Supabase.instance.client.auth.signInWithPassword(
+        final res = await Supabase.instance.client.auth.signInWithPassword(
           email: email,
           password: password,
         );
 
-        await _saveOrClearCredentials();
-
-        if (mounted) {
-          final user = Supabase.instance.client.auth.currentUser;
-          if (user != null) {
-            try {
-              final data = await Supabase.instance.client
-                  .from('users')
-                  .select('voice_profile_url')
-                  .eq('id', user.id)
-                  .single();
-
-              if (data['voice_profile_url'] == null ||
-                  data['voice_profile_url'].toString().isEmpty) {
-                Navigator.pushReplacementNamed(context, '/voice_setup');
-              } else {
-                Navigator.pushReplacementNamed(context, '/home');
-              }
-            } catch (e) {
-              Navigator.pushReplacementNamed(context, '/voice_setup');
-            }
-          }
+        if (mounted && res.user != null) {
+          await _navigateAfterAuth(res.user!.id);
         }
       } else {
-        await Supabase.instance.client.auth.signUp(
+        final res = await Supabase.instance.client.auth.signUp(
           email: email,
           password: password,
           data: {'full_name': name},
         );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account created! Please check your email inbox to verify your account before logging in.'),
-              duration: Duration(seconds: 5),
-            ),
-          );
-          setState(() {
-            _isLogin = true;
-            _passwordController.clear();
-          });
+
+        final user = res.user;
+        final session = res.session;
+
+        if (session != null && user != null) {
+          // Account is created and user is automatically authenticated!
+          try {
+            await Supabase.instance.client.from('users').upsert({
+              'id': user.id,
+              'full_name': name,
+              'email': email,
+            });
+          } catch (e) {
+            debugPrint('Error creating user profile in public.users: $e');
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Welcome, $name! Setting up your voice profile...',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF10B981),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+
+            await _navigateAfterAuth(user.id);
+          }
+        } else {
+          // Email confirmation is required by Supabase project settings
+          if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(
+                      Icons.mark_email_read_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Account created! Please check your email to verify before signing in.',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: AppTheme.primaryColor,
+                duration: const Duration(seconds: 5),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+            setState(() {
+              _isLogin = true;
+              _passwordController.clear();
+            });
+          }
         }
       }
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
@@ -176,7 +222,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _showForgotPasswordDialog() async {
-    final resetEmailController = TextEditingController(text: _emailController.text);
+    final resetEmailController = TextEditingController(
+      text: _emailController.text,
+    );
     bool isSending = false;
 
     await showDialog(
@@ -186,14 +234,22 @@ class _LoginScreenState extends State<LoginScreen> {
           builder: (context, setState) {
             return AlertDialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text('Reset Password', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                'Reset Password',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Enter your email address and we will send you a link to reset your password.',
-                    style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 14),
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF64748B),
+                      fontSize: 14,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -215,9 +271,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: const Color(0xFF94A3B8),
                           fontWeight: FontWeight.w500,
                         ),
-                        prefixIcon: const Icon(Icons.mail_outline_rounded, color: Color(0xFF2563EB)),
+                        prefixIcon: const Icon(
+                          Icons.mail_outline_rounded,
+                          color: Color(0xFF2563EB),
+                        ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -226,7 +288,10 @@ class _LoginScreenState extends State<LoginScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext),
-                  child: Text('Cancel', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.inter(color: const Color(0xFF64748B)),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: isSending
@@ -235,21 +300,30 @@ class _LoginScreenState extends State<LoginScreen> {
                           final email = resetEmailController.text.trim();
                           if (email.isEmpty) return;
 
+                          final messenger = ScaffoldMessenger.of(context);
                           setState(() => isSending = true);
                           try {
-                            await Supabase.instance.client.auth.resetPasswordForEmail(email);
+                            await Supabase.instance.client.auth
+                                .resetPasswordForEmail(email);
                             if (dialogContext.mounted) {
                               Navigator.pop(dialogContext);
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                const SnackBar(content: Text('Password reset link sent!')),
-                              );
                             }
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Password reset link sent!'),
+                              ),
+                            );
                           } catch (e) {
                             if (dialogContext.mounted) {
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                const SnackBar(content: Text('Error sending password reset link.')),
-                              );
+                              Navigator.pop(dialogContext);
                             }
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Error sending password reset link.',
+                                ),
+                              ),
+                            );
                           } finally {
                             if (dialogContext.mounted) {
                               setState(() => isSending = false);
@@ -259,11 +333,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF3B82F6),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   child: isSending
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text('Send Link', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          'Send Link',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                        ),
                 ),
               ],
             );
@@ -273,65 +359,48 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF0F5FA),
       body: Stack(
         children: [
           // Background waves
-          Positioned.fill(
-            child: CustomPaint(
-              painter: WavesPainter(),
-            ),
-          ),
-          
+          Positioned.fill(child: CustomPaint(painter: WavesPainter())),
+
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 20.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 10),
                   // App Logo
                   Container(
-                    width: 72,
-                    height: 72,
+                    width: 80,
+                    height: 80,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1D4ED8),
-                      borderRadius: BorderRadius.circular(20),
+                      shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1D4ED8).withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                          blurRadius: 18,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          _buildSoundBar(14),
-                          const SizedBox(width: 4),
-                          _buildSoundBar(24),
-                          const SizedBox(width: 4),
-                          _buildSoundBar(34),
-                          const SizedBox(width: 4),
-                          _buildSoundBar(24),
-                          const SizedBox(width: 4),
-                          _buildSoundBar(14),
-                        ],
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/icon/app_icon.jpg',
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // App Title
                   RichText(
                     text: TextSpan(
@@ -353,7 +422,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Subtitle
                   Text(
                     'Connect  •  Collaborate  •  Get Things Done',
@@ -365,7 +434,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  
+
                   // Login Card
                   Container(
                     width: double.infinity,
@@ -394,7 +463,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          _isLogin ? 'Sign in to your account to continue' : 'Sign up for a new account',
+                          _isLogin
+                              ? 'Sign in to your account to continue'
+                              : 'Sign up for a new account',
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             color: const Color(0xFF64748B),
@@ -402,14 +473,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        
+
                         if (!_isLogin) ...[
                           // Full Name Field
                           Container(
                             decoration: BoxDecoration(
                               color: const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                             ),
                             child: TextField(
                               controller: _nameController,
@@ -438,7 +511,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                        
+
                         // Email Field
                         Container(
                           decoration: BoxDecoration(
@@ -472,7 +545,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Password Field
                         Container(
                           decoration: BoxDecoration(
@@ -519,54 +592,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         if (_isLogin) ...[
-                          // Remember me & Forgot Password
-                          Row(
-                            children: [
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: Checkbox(
-                                  value: _rememberMe,
-                                  onChanged: (val) {
-                                    setState(() => _rememberMe = val ?? true);
-                                  },
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  activeColor: const Color(0xFF2563EB),
-                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Remember Me',
+                          // Forgot Password
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              onTap: _showForgotPasswordDialog,
+                              child: Text(
+                                'Forgot Password?',
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
-                                  color: const Color(0xFF0F172A),
-                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF2563EB),
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const Spacer(),
-                              GestureDetector(
-                                onTap: _showForgotPasswordDialog,
-                                child: Text(
-                                  'Forgot Password?',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    color: const Color(0xFF2563EB),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                           const SizedBox(height: 24),
                         ] else ...[
                           const SizedBox(height: 8),
                         ],
-                        
+
                         // Sign In / Create Account Button
                         SizedBox(
                           width: double.infinity,
@@ -593,7 +640,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(_isLogin ? Icons.login_rounded : Icons.person_add_rounded, size: 20),
+                                      Icon(
+                                        _isLogin
+                                            ? Icons.login_rounded
+                                            : Icons.person_add_rounded,
+                                        size: 20,
+                                      ),
                                       const SizedBox(width: 8),
                                       Text(
                                         _isLogin ? 'Sign In' : 'Create Account',
@@ -606,15 +658,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // OR divider
                         Row(
                           children: [
-                            Expanded(child: Divider(color: const Color(0xFFE2E8F0))),
+                            Expanded(
+                              child: Divider(color: const Color(0xFFE2E8F0)),
+                            ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: Text(
                                 'OR',
                                 style: GoogleFonts.inter(
@@ -624,12 +680,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                            Expanded(child: Divider(color: const Color(0xFFE2E8F0))),
+                            Expanded(
+                              child: Divider(color: const Color(0xFFE2E8F0)),
+                            ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // Continue with Google Button
                         SizedBox(
                           width: double.infinity,
@@ -664,15 +722,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   // Sign Up Link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        _isLogin ? 'New to Smart Meeting? ' : 'Already have an account? ',
+                        _isLogin
+                            ? 'New to Smart Meeting? '
+                            : 'Already have an account? ',
                         style: GoogleFonts.inter(
                           fontSize: 14,
                           color: const Color(0xFF64748B),
@@ -708,17 +768,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildSoundBar(double height) {
-    return Container(
-      width: 4,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(2),
-      ),
-    );
-  }
-
   Widget _buildGoogleIcon() {
     return Container(
       width: 24,
@@ -743,18 +792,20 @@ class WavesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // We draw soft, light blue blobs to mimic the image background
-    
+
     // Top Left Wave
     final Paint paint1 = Paint()
       ..color = const Color(0xFFD6E4FF).withValues(alpha: 0.6)
       ..style = PaintingStyle.fill;
-    
+
     final path1 = Path();
     path1.moveTo(0, 0);
     path1.lineTo(size.width * 0.4, 0);
     path1.quadraticBezierTo(
-      size.width * 0.3, size.height * 0.15,
-      0, size.height * 0.25,
+      size.width * 0.3,
+      size.height * 0.15,
+      0,
+      size.height * 0.25,
     );
     path1.close();
     canvas.drawPath(path1, paint1);
@@ -763,13 +814,15 @@ class WavesPainter extends CustomPainter {
     final Paint paint2 = Paint()
       ..color = const Color(0xFFD6E4FF).withValues(alpha: 0.4)
       ..style = PaintingStyle.fill;
-    
+
     final path2 = Path();
     path2.moveTo(size.width, 0);
     path2.lineTo(size.width * 0.6, 0);
     path2.quadraticBezierTo(
-      size.width * 0.8, size.height * 0.15,
-      size.width, size.height * 0.35,
+      size.width * 0.8,
+      size.height * 0.15,
+      size.width,
+      size.height * 0.35,
     );
     path2.close();
     canvas.drawPath(path2, paint2);
@@ -778,37 +831,45 @@ class WavesPainter extends CustomPainter {
     final Paint paint3 = Paint()
       ..color = const Color(0xFFD6E4FF).withValues(alpha: 0.5)
       ..style = PaintingStyle.fill;
-      
+
     final path3 = Path();
     path3.moveTo(0, size.height);
     path3.lineTo(0, size.height * 0.85);
     path3.quadraticBezierTo(
-      size.width * 0.3, size.height * 0.95,
-      size.width * 0.6, size.height * 0.9,
+      size.width * 0.3,
+      size.height * 0.95,
+      size.width * 0.6,
+      size.height * 0.9,
     );
     path3.quadraticBezierTo(
-      size.width * 0.8, size.height * 0.85,
-      size.width, size.height * 0.95,
+      size.width * 0.8,
+      size.height * 0.85,
+      size.width,
+      size.height * 0.95,
     );
     path3.lineTo(size.width, size.height);
     path3.close();
     canvas.drawPath(path3, paint3);
-    
+
     // Bottom Wave 2 (darker)
     final Paint paint4 = Paint()
       ..color = const Color(0xFFADC8FF).withValues(alpha: 0.6)
       ..style = PaintingStyle.fill;
-      
+
     final path4 = Path();
     path4.moveTo(0, size.height);
     path4.lineTo(0, size.height * 0.92);
     path4.quadraticBezierTo(
-      size.width * 0.2, size.height * 0.98,
-      size.width * 0.5, size.height * 0.95,
+      size.width * 0.2,
+      size.height * 0.98,
+      size.width * 0.5,
+      size.height * 0.95,
     );
     path4.quadraticBezierTo(
-      size.width * 0.8, size.height * 0.92,
-      size.width, size.height * 0.98,
+      size.width * 0.8,
+      size.height * 0.92,
+      size.width,
+      size.height * 0.98,
     );
     path4.lineTo(size.width, size.height);
     path4.close();

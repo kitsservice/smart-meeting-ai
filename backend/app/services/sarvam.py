@@ -1,43 +1,52 @@
+import logging
+
 import httpx
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SarvamAIService:
     BASE_URL = "https://api.sarvam.ai"
 
     def __init__(self):
-        self._client = None
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self.BASE_URL, timeout=30.0)
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                base_url=self.BASE_URL,
+                timeout=httpx.Timeout(60.0, connect=10.0),
+                limits=httpx.Limits(
+                    max_keepalive_connections=20, max_connections=50, keepalive_expiry=30.0
+                ),
+            )
         return self._client
 
-    async def transcribe_audio(
-        self, audio_bytes: bytes, filename: str = "audio.wav"
-    ) -> str:
+    async def aclose(self):
+        """Close the underlying HTTP client session."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+
+    async def transcribe_audio(self, audio_bytes: bytes, filename: str = "audio.wav") -> str:
         """
         Sends audio to Sarvam AI for transcription.
         Returns the transcribed text.
         """
         if not settings.SARVAM_API_KEY:
             # Fallback for local testing without an API key
-            return (
-                "This is a simulated transcript since no Sarvam API key was provided."
-            )
+            return "This is a simulated transcript since no Sarvam API key was provided."
 
         headers = {"api-subscription-key": settings.SARVAM_API_KEY}
-
         files = {"file": (filename, audio_bytes, "audio/wav")}
-        
-        # FIX: The real-time REST API does not support diarization. 
-        # Sending unsupported parameters causes a 400 Bad Request.
+
         data = {
             "model": "saaras:v4",
-            "language_code": "unknown", # Enables Auto-Detection for Hindi, English, etc.
-            "mode": "transcribe"
+            "language_code": "unknown",  # Enables Auto-Detection for Hindi, English, etc.
+            "mode": "transcribe",
         }
 
         try:
@@ -48,14 +57,15 @@ class SarvamAIService:
             response_data = response.json()
             return response_data.get("transcript", "")
         except Exception as e:
+            logger.error(f"Sarvam AI Error: {e}")
             return f"Error during transcription: {e!s}"
 
     async def generate_summary(self, transcript: str) -> dict:
         """
-        OpenAI dependency removed. Returns a static fallback for summary and action items.
+        Summary fallback.
         """
         return {
-            "summary": "AI Summaries are currently disabled to save API costs.",
+            "summary": "AI Summaries are managed via Gemini and Deepgram Intelligence.",
             "action_items": [],
         }
 

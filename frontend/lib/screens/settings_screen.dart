@@ -197,6 +197,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }
                     },
                   ),
+
+                  const SizedBox(height: 24),
+
+                  const Text(
+                    'Voice Profile',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () {
+                      Navigator.pushNamed(context, '/voice_setup');
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.dividerColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.record_voice_over_rounded,
+                            color: AppTheme.primaryColor,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Voice Calibration',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Calibrate or update your speaker voice signature',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 16,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -232,6 +294,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
 
                   if (confirm == true) {
+                    if (!context.mounted) return;
                     showDialog(
                       context: context,
                       barrierDismissible: false,

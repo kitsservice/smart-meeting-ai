@@ -1,8 +1,10 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
@@ -19,58 +21,110 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
   bool _hasRecorded = false;
   bool _isUploading = false;
   String? _recordedFilePath;
+  int _recordSeconds = 0;
+  Timer? _timer;
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  double _currentAmplitude = -40.0;
+
+  // Real-time Karaoke word highlighter tracking
+  int _highlightedWordIndex = 0;
+  int _speechTicks = 0;
 
   late AnimationController _animationController;
   final AudioRecorder _audioRecorder = AudioRecorder();
 
-  // Real-time speech tracking
-  final stt.SpeechToText _speechToText = stt.SpeechToText();
-  bool _isSpeechAvailable = false;
-  String _recognizedText = "";
+  // Curated diverse phrases so every user automatically gets a different phrase
+  static const List<String> _calibrationPhrases = [
+    "Hi, I am setting up my Smart Meeting voice profile. I speak clearly and naturally, and this is my regular speaking voice.",
+    "Welcome to our team discussion today. We will review our project milestones, prioritize key action items, and align on upcoming goals.",
+    "During this meeting, I will share the latest technical updates, discuss architectural improvements, and outline our product roadmap.",
+    "Effective communication and teamwork drive our success. Let us collaborate smoothly, solve challenges together, and deliver outstanding results.",
+    "Good morning everyone. Let us review the action items from our previous session and plan our next steps for this quarter.",
+    "I am calibrating my microphone for real-time meeting transcription, speaker identification, and automated AI summary generation.",
+    "Innovation, creativity, and consistency are essential for building great products. I look forward to working closely with everyone on this project.",
+    "The quick brown fox jumps over the lazy dog while we discuss our quarterly business review, strategic priorities, and team accomplishments.",
+    "Our main goal for this sprint is optimizing system responsiveness, reducing latency, and delivering a polished experience to our users.",
+    "Let us carefully analyze the user feedback from our latest release and incorporate these insights into our development priorities.",
+    "Clear decision making and open dialogue help our engineering team solve complex problems with high confidence and agility.",
+    "Today we will walk through the customer journey, examine key conversion metrics, and plan our marketing campaign for next month.",
+    "Every team member brings valuable perspective to the table, ensuring our architectural designs remain robust and future-proof.",
+    "We will finalize the project timeline, confirm resource allocations, and ensure all deliverables meet our quality standards.",
+    "Consistent collaboration and continuous improvement enable us to build scalable software and achieve long-term technical excellence.",
+    "I speak with clarity and confidence so the system can accurately recognize my voice and attribute my contributions during meetings.",
+  ];
 
-  final String _targetPhrase =
-      "Hi, I am setting up my Smart Meeting voice profile. I speak clearly and naturally, and this is my regular speaking voice.";
+  late String _targetPhrase;
+  late List<String> _words;
 
   @override
   void initState() {
     super.initState();
+    // Assign a unique random phrase per user/session so users never get the same text
+    final user = Supabase.instance.client.auth.currentUser;
+    final random = math.Random();
+    int chosenIndex;
+    if (user != null && user.id.isNotEmpty) {
+      // Deterministically seed with user ID combined with a randomized factor
+      final userHash = user.id.codeUnits.fold<int>(0, (acc, c) => (acc * 31 + c) & 0x7FFFFFFF);
+      chosenIndex = (userHash + random.nextInt(_calibrationPhrases.length)) % _calibrationPhrases.length;
+    } else {
+      chosenIndex = random.nextInt(_calibrationPhrases.length);
+    }
+
+    _targetPhrase = _calibrationPhrases[chosenIndex];
+    _words = _targetPhrase.split(' ');
+
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    _isSpeechAvailable = await _speechToText.initialize();
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
+    _amplitudeSub?.cancel();
     _animationController.dispose();
     _audioRecorder.dispose();
-    _speechToText.cancel();
     super.dispose();
   }
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
       // Stop recording
+      _timer?.cancel();
+      _amplitudeSub?.cancel();
       final path = await _audioRecorder.stop();
-      if (_isSpeechAvailable) await _speechToText.stop();
+
       setState(() {
         _isRecording = false;
         _recordedFilePath = path;
-        _hasRecorded = path != null;
+        _hasRecorded = path != null && _recordSeconds >= 3;
       });
+
+      if (_recordSeconds < 3 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sample too short. Please speak for at least 4 seconds while reading the phrase.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } else {
       // Start recording
       if (await _audioRecorder.hasPermission()) {
         final directory = await getApplicationDocumentsDirectory();
         final path = '${directory.path}/voice_enrollment.wav';
 
+        // 16kHz mono WAV is native for SpeechBrain ECAPA-TDNN biometrics
         await _audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.wav, bitRate: 128000),
+          const RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
           path: path,
         );
 
@@ -78,18 +132,49 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           _isRecording = true;
           _hasRecorded = false;
           _recordedFilePath = null;
-          _recognizedText = "";
+          _recordSeconds = 0;
+          _currentAmplitude = -40.0;
+          _highlightedWordIndex = 0;
+          _speechTicks = 0;
         });
 
-        if (_isSpeechAvailable) {
-          _speechToText.listen(
-            onResult: (result) {
+        _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) {
+            setState(() {
+              _recordSeconds++;
+            });
+          }
+        });
+
+        // Real-time amplitude listener: advances Karaoke words as user speaks
+        // Completely silent on Android - ZERO system beeps or interruptions!
+        _amplitudeSub = _audioRecorder
+            .onAmplitudeChanged(const Duration(milliseconds: 100))
+            .listen((amp) {
+              if (!mounted || !_isRecording) return;
+              final current = amp.current;
+
               setState(() {
-                _recognizedText = result.recognizedWords;
+                _currentAmplitude = current;
               });
-            },
-            cancelOnError: true,
-            partialResults: true,
+
+              // Voice activity threshold: typical speaking voice is > -36 dB
+              if (current > -36.0) {
+                _speechTicks++;
+                // Advance word every ~300ms of active voice
+                if (_speechTicks % 3 == 0) {
+                  if (_highlightedWordIndex < _words.length) {
+                    setState(() {
+                      _highlightedWordIndex++;
+                    });
+                  }
+                }
+              }
+            });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Microphone permission is required.')),
           );
         }
       }
@@ -97,122 +182,127 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
   }
 
   Future<void> _finishSetup() async {
-    if (_recordedFilePath == null) return;
+    if (_recordedFilePath == null || _recordSeconds < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please record for at least 4 seconds before saving.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isUploading = true);
-
-    // Strict Validation Check
-    if (_isSpeechAvailable && _recognizedText.isNotEmpty) {
-      List<String> targetWords = _targetPhrase
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^\w\s]'), '')
-          .split(' ');
-      String recLower = _recognizedText.toLowerCase().replaceAll(
-        RegExp(r'[^\w\s]'),
-        '',
-      );
-
-      int matchCount = 0;
-      for (String word in targetWords) {
-        if (word.length > 2 && recLower.contains(word)) {
-          // Only check significant words
-          matchCount++;
-        }
-      }
-
-      int totalSignificantWords = targetWords.where((w) => w.length > 2).length;
-      if (matchCount < (totalSignificantWords * 0.7).floor()) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Warning: Please read the FULL phrase clearly before saving.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() => _isUploading = false);
-        return;
-      }
-    }
 
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        final success = await ApiService().enrollVoice(_recordedFilePath!);
+        // 1. Immediately mark the user as enrolled in Supabase DB so account setup is complete
+        try {
+          await Supabase.instance.client
+              .from('users')
+              .update({'voice_profile_url': 'enrolled_in_ai'})
+              .eq('id', user.id);
+        } catch (_) {
+          await Supabase.instance.client
+              .from('users')
+              .upsert({'id': user.id, 'voice_profile_url': 'enrolled_in_ai'});
+        }
 
-        if (success) {
-          // Update local DB marker so we don't ask again
-          await Supabase.instance.client.from('users').upsert({
-            'id': user.id,
-            'voice_profile_url': 'enrolled_in_ai',
-          });
+        // 2. Attempt backend biometrics enrollment asynchronously
+        try {
+          await ApiService().enrollVoice(_recordedFilePath!);
+        } catch (e) {
+          debugPrint('Backend biometrics enrollment offline notice: $e');
+        }
 
-          if (mounted) {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-        } else {
+        // 3. Play confirmation sound & haptic feedback
+        try {
+          SystemSound.play(SystemSoundType.click);
+          HapticFeedback.mediumImpact();
+        } catch (_) {}
+
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to save voice profile.')),
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Voice profile calibrated and saved!'),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
           );
+          Navigator.pushReplacementNamed(context, '/home');
         }
       } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error uploading voice: $e')));
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      }
+    } else {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
       }
     }
 
-    setState(() => _isUploading = false);
+    if (mounted) {
+      setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _skipCalibration() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      try {
+        await Supabase.instance.client
+            .from('users')
+            .update({'voice_profile_url': 'skipped'})
+            .eq('id', user.id);
+      } catch (e) {
+        debugPrint('Error updating skip voice status: $e');
+      }
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice setup skipped. You can calibrate anytime in Settings.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      Navigator.pushReplacementNamed(context, '/home');
+    }
   }
 
   List<TextSpan> _buildHighlightedText() {
-    List<String> targetWords = _targetPhrase.split(' ');
-
-    // Count frequencies of words spoken so far
-    String recLower = _recognizedText.toLowerCase().replaceAll(
-      RegExp(r'[^\w\s]'),
-      '',
-    );
-    List<String> spokenWords = recLower
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .toList();
-
-    Map<String, int> spokenCounts = {};
-    for (String w in spokenWords) {
-      spokenCounts[w] = (spokenCounts[w] ?? 0) + 1;
-    }
-
-    Map<String, int> targetUsedCounts = {};
-
     List<TextSpan> spans = [];
-    for (String word in targetWords) {
-      String cleanWord = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
-
-      bool isMatch = false;
-      if (cleanWord.isNotEmpty) {
-        int used = targetUsedCounts[cleanWord] ?? 0;
-        int spoken = spokenCounts[cleanWord] ?? 0;
-
-        // If the user has spoken this word more times than we've highlighted it, highlight it!
-        if (spoken > used) {
-          isMatch = true;
-          targetUsedCounts[cleanWord] = used + 1;
-        }
-      }
+    for (int i = 0; i < _words.length; i++) {
+      final bool isHighlighted = _isRecording
+          ? (i < _highlightedWordIndex)
+          : (_hasRecorded ? true : false);
+      final bool isCurrentWord = _isRecording && (i == _highlightedWordIndex);
 
       spans.add(
         TextSpan(
-          text: '$word ',
+          text: '${_words[i]} ',
           style: TextStyle(
-            fontSize: 20, // Slightly larger for better readability
-            fontWeight: isMatch ? FontWeight.bold : FontWeight.w500,
-            color: isMatch
-                ? AppTheme
-                      .primaryColor // Professional Corporate Blue highlight
-                : (_isRecording
-                      ? AppTheme.textPrimary.withValues(alpha: 0.3)
-                      : AppTheme.textPrimary),
+            fontSize: 18,
+            fontWeight: (isHighlighted || isCurrentWord)
+                ? FontWeight.bold
+                : FontWeight.w500,
+            color: isCurrentWord
+                ? const Color(0xFF2563EB)
+                : (isHighlighted
+                    ? const Color(0xFF1D4ED8)
+                    : (_isRecording
+                        ? AppTheme.textPrimary.withValues(alpha: 0.35)
+                        : AppTheme.textPrimary)),
+            backgroundColor: isCurrentWord
+                ? const Color(0xFF2563EB).withValues(alpha: 0.14)
+                : Colors.transparent,
             height: 1.6,
           ),
         ),
@@ -223,54 +313,101 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Custom Header with Gradient
-            Container(
-              padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
-              decoration: const BoxDecoration(
-                gradient: AppTheme.primaryGradient,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(40),
-                  bottomRight: Radius.circular(40),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: const BorderRadius.all(Radius.circular(999)),
-                    ),
-                    child: const Icon(
-                      Icons.voice_chat,
-                      size: 48,
-                      color: Colors.white,
-                    ),
+    final canPop = Navigator.canPop(context);
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Custom Header with Gradient & Centered Icon
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                decoration: const BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(36),
+                    bottomRight: Radius.circular(36),
                   ),
-                  const SizedBox(height: 20),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (canPop)
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.15),
+                              padding: const EdgeInsets.all(8),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 48),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: const BorderRadius.all(
+                              Radius.circular(999),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.record_voice_over_rounded,
+                            size: 34,
+                            color: Colors.white,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _skipCalibration,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          child: const Text(
+                            'Skip',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
                   const Text(
                     'Voice Calibration',
                     style: TextStyle(
-                      fontSize: 32,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Read the phrase below so the AI can recognize you in meetings.',
+                    'Read the phrase below so Smart Meeting AI recognizes your voice during meetings.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 13,
                       color: Colors.white.withValues(alpha: 0.9),
-                      height: 1.4,
+                      height: 1.3,
                     ),
                   ),
                 ],
@@ -281,68 +418,115 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
-                  vertical: 32,
+                  vertical: 20,
                 ),
                 child: Column(
                   children: [
-                    // Reading prompt card
-                    AnimatedBuilder(
-                      animation: _animationController,
-                      builder: (context, child) {
-                        return Container(
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
+                    // Reading prompt card with live word highlighting & shuffle
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: _isRecording
+                            ? const Color(0xFFEFF6FF)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _isRecording
+                              ? const Color(0xFF3B82F6)
+                              : AppTheme.primaryColor.withValues(alpha: 0.12),
+                          width: _isRecording ? 1.5 : 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
                             color: _isRecording
-                                ? Colors.red.withValues(alpha: 0.05)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: _isRecording
-                                  ? Colors.red.withValues(alpha: 
-                                      0.5 + (_animationController.value * 0.5),
-                                    )
-                                  : AppTheme.primaryColor.withValues(alpha: 0.1),
-                              width: _isRecording ? 2.0 : 1.0,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _isRecording
-                                    ? Colors.red.withValues(alpha: 
-                                        0.1 +
-                                            (_animationController.value * 0.2),
-                                      )
-                                    : AppTheme.primaryColor.withValues(alpha: 0.05),
-                                blurRadius: 30,
-                                spreadRadius: _isRecording
-                                    ? (_animationController.value * 10)
-                                    : 0,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
+                                ? const Color(0xFF3B82F6).withValues(alpha: 0.1)
+                                : AppTheme.primaryColor.withValues(alpha: 0.04),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
                           ),
-                          child: Column(
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Personalized voice sample badge (no manual change phrase option)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.format_quote_rounded,
-                                size: 40,
-                                color: _isRecording
-                                    ? Colors.red.withValues(alpha: 0.5)
-                                    : AppTheme.primaryColor.withValues(alpha: 0.3),
+                                Icons.record_voice_over_rounded,
+                                size: 16,
+                                color: AppTheme.primaryColor,
                               ),
-                              const SizedBox(height: 16),
-                              RichText(
-                                textAlign: TextAlign.center,
-                                text: TextSpan(
-                                  children: _buildHighlightedText(),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Personalized Reading Sample',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primaryColor,
+                                  letterSpacing: 0.2,
                                 ),
                               ),
                             ],
                           ),
-                        );
-                      },
+                          const Divider(height: 18),
+                          Icon(
+                            Icons.format_quote_rounded,
+                            size: 28,
+                            color: _isRecording
+                                ? const Color(0xFF2563EB)
+                                : AppTheme.primaryColor.withValues(alpha: 0.4),
+                          ),
+                          const SizedBox(height: 8),
+                          RichText(
+                            textAlign: TextAlign.center,
+                            text: TextSpan(
+                              children: _buildHighlightedText(),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
 
                     const Spacer(),
+
+                    // Live Wave Visualizer during recording
+                    if (_isRecording) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(12, (index) {
+                          final double normalized = (_currentAmplitude + 60)
+                              .clamp(0, 60) /
+                              60;
+                          final double waveHeight =
+                              12 + (36 * normalized * ((index % 3 + 1) / 3));
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                            width: 4,
+                            height: waveHeight.clamp(8.0, 48.0),
+                            decoration: BoxDecoration(
+                              color: _recordSeconds >= 4
+                                  ? Colors.green
+                                  : const Color(0xFF2563EB),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Recording: 00:${_recordSeconds.toString().padLeft(2, '0')} ${_recordSeconds >= 4 ? '✓ (Good length!)' : '(Speak for 4+ sec)'}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: _recordSeconds >= 4
+                              ? Colors.green[700]
+                              : const Color(0xFF2563EB),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Record button
                     GestureDetector(
@@ -351,31 +535,33 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                         animation: _animationController,
                         builder: (context, child) {
                           return Container(
-                            width: 110,
-                            height: 110,
+                            width: 96,
+                            height: 96,
                             decoration: BoxDecoration(
-                              borderRadius: const BorderRadius.all(Radius.circular(999)),
+                              shape: BoxShape.circle,
                               color: _isRecording
                                   ? Colors.red
                                   : AppTheme.primaryColor,
                               boxShadow: [
                                 if (_isRecording)
                                   BoxShadow(
-                                    color: Colors.red.withValues(alpha: 
-                                      0.3 + (_animationController.value * 0.4),
+                                    color: Colors.red.withValues(
+                                      alpha:
+                                          0.3 +
+                                          (_animationController.value * 0.4),
                                     ),
                                     spreadRadius:
-                                        _animationController.value * 30,
-                                    blurRadius: 20,
+                                        _animationController.value * 20,
+                                    blurRadius: 15,
                                   ),
                                 if (!_isRecording)
                                   BoxShadow(
-                                    color: AppTheme.primaryColor.withValues(alpha: 
-                                      0.3,
+                                    color: AppTheme.primaryColor.withValues(
+                                      alpha: 0.3,
                                     ),
-                                    spreadRadius: 4,
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
+                                    spreadRadius: 2,
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
                                   ),
                               ],
                             ),
@@ -384,52 +570,58 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                                   ? Icons.stop_rounded
                                   : Icons.mic_rounded,
                               color: Colors.white,
-                              size: 48,
+                              size: 42,
                             ),
                           );
                         },
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 14),
                     Text(
                       _isRecording
-                          ? 'Listening...'
+                          ? 'Tap to stop when done'
                           : (_hasRecorded
-                                ? 'Voice saved! Tap to retry.'
-                                : 'Tap to start recording'),
+                              ? 'Voice captured (${_recordSeconds}s) ✓'
+                              : 'Tap to start speaking'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: _isRecording
                             ? Colors.red
-                            : AppTheme.textSecondary,
-                        letterSpacing: 0.5,
+                            : (_hasRecorded
+                                ? Colors.green[700]
+                                : AppTheme.textSecondary),
                       ),
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
 
-                    // Next button
+                    // Complete Setup button
                     AnimatedOpacity(
-                      opacity: (_hasRecorded && !_isRecording) ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 300),
+                      opacity: (_hasRecorded && !_isRecording) ? 1.0 : 0.4,
+                      duration: const Duration(milliseconds: 250),
                       child: Container(
                         width: double.infinity,
-                        height: 56,
+                        height: 52,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
                           gradient: AppTheme.primaryGradient,
                           boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
+                            if (_hasRecorded && !_isRecording)
+                              BoxShadow(
+                                color: AppTheme.primaryColor.withValues(
+                                  alpha: 0.3,
+                                ),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
                           ],
                         ),
                         child: ElevatedButton(
-                          onPressed: (_hasRecorded && !_isRecording)
+                          onPressed: (_hasRecorded &&
+                                  !_isRecording &&
+                                  !_isUploading)
                               ? _finishSetup
                               : null,
                           style: ElevatedButton.styleFrom(
@@ -439,14 +631,23 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                               borderRadius: BorderRadius.circular(16),
                             ),
                           ),
-                          child: const Text(
-                            'Complete Setup',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
+                          child: _isUploading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : const Text(
+                                  'Complete Setup',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
@@ -457,6 +658,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

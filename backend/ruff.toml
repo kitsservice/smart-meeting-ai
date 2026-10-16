@@ -1,0 +1,19 @@
+# Ruff configuration for FastAPI backend
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "PL", "RUF"]
+ignore = [
+    # B008: FastAPI Depends/File/Query in parameter defaults
+    "B008",
+    # PLR2004: Magic value used in comparison
+    "PLR2004",
+    # PLR0912, PLR0915: Complexity limits for multi-step AI orchestration pipelines
+    "PLR0912",
+    "PLR0915",
+    # PLW0603: Global statement used for ML model singleton cache
+    "PLW0603",
+    # PLC0415: Lazy imports inside functions for heavy ML/SDK packages
+    "PLC0415",
+]

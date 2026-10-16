@@ -1,6 +1,6 @@
 {
-    "name": "smart_meeting_ai",
-    "short_name": "smart_meeting_ai",
+    "name": "Smart Meeting",
+    "short_name": "Smart Meeting",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

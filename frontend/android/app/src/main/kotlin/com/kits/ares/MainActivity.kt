@@ -1,4 +1,4 @@
-package com.ares.smart_meeting_ai
+package com.kits.ares
 
 import io.flutter.embedding.android.FlutterActivity
 

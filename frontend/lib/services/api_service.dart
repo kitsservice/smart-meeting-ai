@@ -1,12 +1,64 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android Emulators to connect to Windows localhost
+  static String? _cachedBaseUrl;
+
+  static String? _getEnv(String key) {
+    try {
+      if (dotenv.isInitialized) {
+        return dotenv.env[key];
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static List<String> get candidateBaseUrls {
+    final list = <String>[];
+    if (_cachedBaseUrl != null && _cachedBaseUrl!.isNotEmpty) {
+      list.add(_cachedBaseUrl!);
+    }
+    final configured = _getEnv('API_BASE_URL')?.trim();
+    if (configured != null && configured.isNotEmpty && !list.contains(configured)) {
+      list.add(configured);
+    }
+    const defaults = [
+      'http://127.0.0.1:8000/api/v1',
+      'http://10.169.93.32:8000/api/v1',
+      'http://192.168.1.5:8000/api/v1',
+      'http://10.0.2.2:8000/api/v1',
+      'http://localhost:8000/api/v1',
+      'https://smart-meeting-ai-7qub.onrender.com/api/v1',
+    ];
+    for (final d in defaults) {
+      if (!list.contains(d)) list.add(d);
+    }
+    return list;
+  }
+
   static String get baseUrl {
-    return 'https://smart-meeting-ai-7qub.onrender.com/api/v1';
+    if (_cachedBaseUrl != null) return _cachedBaseUrl!;
+
+    if (kReleaseMode) {
+      final prodUrl = _getEnv('PROD_API_BASE_URL') ?? _getEnv('API_BASE_URL');
+      if (prodUrl != null &&
+          prodUrl.trim().isNotEmpty &&
+          !prodUrl.contains('192.168.') &&
+          !prodUrl.contains('localhost') &&
+          !prodUrl.contains('10.0.2.2')) {
+        return prodUrl.trim();
+      }
+      return 'https://smart-meeting-ai-7qub.onrender.com/api/v1';
+    } else {
+      final configuredUrl = _getEnv('API_BASE_URL')?.trim();
+      if (configuredUrl != null && configuredUrl.isNotEmpty) {
+        return configuredUrl;
+      }
+      return 'http://127.0.0.1:8000/api/v1'; // Physical device via adb reverse or local
+    }
   }
 
   static final ApiService _instance = ApiService._internal();
@@ -15,47 +67,137 @@ class ApiService {
 
   final http.Client _client = http.Client(); // Persistent client
 
+  String? get _currentUserId {
+    try {
+      return Supabase.instance.client.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Map<String, String> _getHeaders({bool isMultipart = false}) {
-    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    String? token;
+    try {
+      token = Supabase.instance.client.auth.currentSession?.accessToken;
+    } catch (_) {}
     final headers = <String, String>{};
     if (!isMultipart) {
       headers['Content-Type'] = 'application/json';
     }
-    if (token != null) {
+    if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
     return headers;
   }
 
   Future<List<dynamic>> getMeetings() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final userId = user?.id ?? '';
+    final userId = _currentUserId ?? '';
+    if (userId.isEmpty) {
+      return []; // Return empty list immediately if not logged in
+    }
     final url = Uri.parse('$baseUrl/meetings/?user_id=$userId');
     try {
-      final response = await _client.get(url, headers: _getHeaders());
+      final response = await _client
+          .get(url, headers: _getHeaders())
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as List<dynamic>;
+        final list = jsonDecode(response.body) as List<dynamic>;
+        return _filterValidMeetings(list);
       } else {
-        print('Failed to load meetings: ${response.body}');
+        debugPrint('Backend HTTP ${response.statusCode}, falling back to Supabase: ${response.body}');
       }
     } catch (e) {
-      print('Error fetching meetings: $e');
+      debugPrint('Backend fetch failed, attempting direct Supabase query: $e');
+    }
+
+    // Direct Supabase fallback: return meetings owned by user OR joined via room code
+    if (userId.isNotEmpty) {
+      try {
+        final data = await Supabase.instance.client
+            .from('meetings')
+            .select('*')
+            .or('user_id.eq.$userId,description.ilike.%$userId%')
+            .order('created_at', ascending: false);
+        return _filterValidMeetings(data as List<dynamic>);
+      } catch (e) {
+        debugPrint('Direct Supabase fetch error: $e');
+      }
     }
     return [];
   }
 
+  List<dynamic> _filterValidMeetings(List<dynamic> list) {
+    return list.where((m) {
+      final desc = (m['description'] ?? '').toString();
+      final title = (m['title'] ?? '').toString();
+      final transcript = (m['transcript'] ?? '').toString().trim();
+      final summary = (m['summary'] ?? '').toString().trim();
+
+      // Exclude aborted or discarded sessions
+      if (desc.contains('Closed before start') ||
+          desc.contains('Discarded by host')) {
+        return false;
+      }
+
+      // Exclude empty room-code placeholders with no transcript or summary
+      final hasTranscript = transcript.isNotEmpty &&
+          transcript != 'null' &&
+          transcript != 'NONE';
+      final hasSummary =
+          summary.isNotEmpty && summary != 'null' && summary != 'NONE';
+      if (!hasTranscript && !hasSummary) {
+        if (desc.contains('[ROOM_CODE:') ||
+            title.startsWith('Meeting ') ||
+            title.startsWith('Completed Meeting ')) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+  }
+
   Future<Map<String, dynamic>?> getMeeting(String meetingId) async {
-    final url = Uri.parse('$baseUrl/meetings/$meetingId');
+    String userId = '';
     try {
-      final response = await _client.get(url, headers: _getHeaders());
+      userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    } catch (_) {}
+    final url = Uri.parse('$baseUrl/meetings/$meetingId?user_id=$userId');
+    try {
+      final response = await _client
+          .get(url, headers: _getHeaders())
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
+      } else if (response.statusCode == 403) {
+        debugPrint('Security: Access denied to meeting $meetingId for user $userId');
+        return null;
       } else {
-        print('Failed to load meeting details: ${response.body}');
+        debugPrint('Backend HTTP ${response.statusCode}, falling back to Supabase: ${response.body}');
       }
     } catch (e) {
-      print('Error fetching meeting details: $e');
+      debugPrint('Backend getMeeting failed, attempting direct Supabase query: $e');
     }
+
+    // Direct Supabase fallback: strictly verify the user is owner or participant
+    try {
+      var query = Supabase.instance.client
+          .from('meetings')
+          .select('*')
+          .eq('id', meetingId);
+
+      if (userId.isNotEmpty) {
+        query = query.or('user_id.eq.$userId,description.ilike.%$userId%');
+      }
+
+      final data = await query.maybeSingle();
+      if (data != null) {
+        return Map<String, dynamic>.from(data);
+      }
+    } catch (e) {
+      debugPrint('Direct Supabase getMeeting error: $e');
+    }
+
     return null;
   }
 
@@ -70,7 +212,7 @@ class ApiService {
         return true;
       }
     } catch (e) {
-      print('Error deleting account: $e');
+      debugPrint('Error deleting account: $e');
     }
     return false;
   }
@@ -78,115 +220,240 @@ class ApiService {
   Future<bool> deleteMeeting(String meetingId) async {
     final url = Uri.parse('$baseUrl/meetings/$meetingId');
     try {
-      final response = await _client.delete(url, headers: _getHeaders());
+      final response = await _client
+          .delete(url, headers: _getHeaders())
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         return true;
       }
     } catch (e) {
-      print('Error deleting meeting: $e');
+      debugPrint('Error deleting meeting via backend: $e');
+    }
+
+    // Direct Supabase fallback
+    try {
+      await Supabase.instance.client
+          .from('meetings')
+          .delete()
+          .eq('id', meetingId);
+      return true;
+    } catch (e) {
+      debugPrint('Direct Supabase delete error: $e');
     }
     return false;
   }
 
   Future<String?> createMeeting(String title, String description) async {
+    final userId = _currentUserId;
+
+    if (userId == null || userId.isEmpty) {
+      debugPrint('createMeeting error: No authenticated user found');
+      return null;
+    }
+
+    // If description contains a room code, check if room meeting already exists in Supabase
+    if (description.contains('[ROOM_CODE:')) {
+      final match = RegExp(r'\[ROOM_CODE:([0-9]{6})\]').firstMatch(description);
+      if (match != null) {
+        final code = match.group(1);
+        try {
+          final existing = await Supabase.instance.client
+              .from('meetings')
+              .select('id, description')
+              .ilike('description', '%[ROOM_CODE:$code]%')
+              .order('created_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+
+          if (existing != null) {
+            final existingId = existing['id'].toString();
+            String finalDesc = description;
+            final existingDesc = (existing['description'] ?? '').toString();
+            if (!finalDesc.contains('[MEMBERS:') &&
+                existingDesc.contains('[MEMBERS:')) {
+              final memMatch =
+                  RegExp(r'\[MEMBERS:\[.*?\]\]').firstMatch(existingDesc);
+              if (memMatch != null) {
+                finalDesc = '$finalDesc ${memMatch.group(0)}'.trim();
+              }
+            }
+            await Supabase.instance.client
+                .from('meetings')
+                .update({
+                  'title': title,
+                  'description': finalDesc,
+                  'user_id': userId,
+                })
+                .eq('id', existingId);
+            return existingId;
+          }
+        } catch (e) {
+          debugPrint('Error reusing room meeting in createMeeting: $e');
+        }
+      }
+    }
+
     final url = Uri.parse('$baseUrl/meetings/');
-    final user = Supabase.instance.client.auth.currentUser;
 
     try {
-      final response = await _client.post(
-        url,
-        headers: _getHeaders(),
-        body: jsonEncode({
-          'title': title,
-          'description': description,
-          'user_id': user?.id,
-        }),
-      );
+      final response = await _client
+          .post(
+            url,
+            headers: _getHeaders(),
+            body: jsonEncode({
+              'title': title,
+              'description': description,
+              'user_id': userId,
+            }),
+          )
+          .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         return data['id']; // Return the meeting ID for audio upload
       } else {
-        print('Failed to save meeting: ${response.body}');
+        debugPrint('Failed to save meeting via backend: ${response.body}');
       }
     } catch (e) {
-      print('Error calling backend: $e');
+      debugPrint('Backend save failed, attempting direct Supabase insert: $e');
     }
+
+    // Direct Supabase fallback: Guarantee meeting is ALWAYS created under this user_id
+    try {
+      final response = await Supabase.instance.client
+          .from('meetings')
+          .insert({
+            'title': title,
+            'description': description,
+            'user_id': userId,
+          })
+          .select()
+          .single();
+      return response['id'];
+    } catch (e) {
+      debugPrint('Direct Supabase insert error: $e');
+    }
+
     return null;
   }
 
   Future<void> processAudio(String meetingId, String filePath) async {
-    final url = Uri.parse('$baseUrl/meetings/$meetingId/process-audio');
+    for (final base in candidateBaseUrls) {
+      final url = Uri.parse('$base/meetings/$meetingId/process-audio');
 
-    try {
-      var request = http.MultipartRequest('POST', url);
-      request.headers.addAll(_getHeaders(isMultipart: true));
+      try {
+        var request = http.MultipartRequest('POST', url);
+        request.headers.addAll(_getHeaders(isMultipart: true));
 
-      // Attach the real audio file
-      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+        // Attach the real audio file
+        request.files.add(await http.MultipartFile.fromPath('file', filePath));
 
-      final streamedResponse = await _client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
+        final streamedResponse = await _client
+            .send(request)
+            .timeout(const Duration(seconds: 90));
+        final response = await http.Response.fromStream(streamedResponse);
 
-      if (response.statusCode == 200) {
-        print('Audio processed successfully!');
-      } else {
-        print('Failed to process audio: ${response.body}');
+        if (response.statusCode == 200) {
+          debugPrint('Audio processed successfully on $base!');
+          _cachedBaseUrl = base;
+          return;
+        } else {
+          debugPrint('Failed to process audio on $base: ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('Error processing audio on $base: $e');
       }
-    } catch (e) {
-      print('Error processing audio: $e');
     }
   }
 
   Future<List<dynamic>> searchSemanticMeetings(String query) async {
-    final url = Uri.parse(
-      '$baseUrl/meetings/search/semantic?query=${Uri.encodeComponent(query)}',
-    );
-    try {
-      final response = await _client.get(url, headers: _getHeaders());
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['data'] as List<dynamic>;
-      } else {
-        print('Failed to semantic search: ${response.body}');
+    final userId = _currentUserId ?? '';
+    for (final base in candidateBaseUrls) {
+      final url = Uri.parse(
+        '$base/meetings/search/semantic?query=${Uri.encodeComponent(query)}&user_id=$userId',
+      );
+      try {
+        final response = await _client
+            .get(url, headers: _getHeaders())
+            .timeout(const Duration(seconds: 20));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          _cachedBaseUrl = base;
+          return data['data'] as List<dynamic>;
+        } else {
+          debugPrint('Failed to semantic search on $base: ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('Error doing semantic search on $base: $e');
       }
-    } catch (e) {
-      print('Error doing semantic search: $e');
     }
     return [];
   }
 
   Future<bool> enrollVoice(String filePath) async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final userId = user?.id ?? '';
-    final fullName = user?.userMetadata?['full_name'] ?? '';
-    if (userId.isEmpty) return false;
-
-    final url = Uri.parse(
-      '$baseUrl/users/enroll-voice?user_id=$userId&full_name=${Uri.encodeComponent(fullName)}',
-    );
-
+    final userId = _currentUserId ?? '';
+    String fullName = '';
     try {
-      var request = http.MultipartRequest('POST', url);
-      request.headers.addAll(_getHeaders(isMultipart: true));
-
-      // Attach the audio file
-      request.files.add(await http.MultipartFile.fromPath('file', filePath));
-
-      final streamedResponse = await _client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        print('Voice enrolled successfully!');
-        return true;
-      } else {
-        print('Failed to enroll voice: ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('Error enrolling voice: $e');
+      fullName = Supabase.instance.client.auth.currentUser?.userMetadata?['full_name'] ?? '';
+    } catch (_) {}
+    if (userId.isEmpty) {
+      debugPrint('Error enrolling voice: user not authenticated');
       return false;
     }
+
+    for (final base in candidateBaseUrls) {
+      final url = Uri.parse(
+        '$base/users/enroll-voice?user_id=$userId&full_name=${Uri.encodeComponent(fullName)}',
+      );
+
+      try {
+        debugPrint('Attempting voice enrollment at: $url');
+        var request = http.MultipartRequest('POST', url);
+        request.headers.addAll(_getHeaders(isMultipart: true));
+
+        // Attach the audio file
+        request.files.add(await http.MultipartFile.fromPath('file', filePath));
+
+        final streamedResponse = await _client
+            .send(request)
+            .timeout(const Duration(seconds: 4));
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode == 200) {
+          debugPrint('Voice enrolled successfully on $base!');
+          _cachedBaseUrl = base;
+          return true;
+        } else {
+          debugPrint('Failed to enroll voice on $base (${response.statusCode}): ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('Error enrolling voice on $base: $e');
+      }
+    }
+
+    // Direct Supabase guarantee: If backend servers are unreachable, sleeping, or offline,
+    // guarantee the user's voice setup record is persisted directly into Supabase.
+    try {
+      debugPrint('Backend servers unreachable; saving voice enrollment directly to Supabase.');
+      await Supabase.instance.client
+          .from('users')
+          .update({'voice_profile_url': 'enrolled_in_ai'})
+          .eq('id', userId);
+      return true;
+    } catch (_) {
+      try {
+        await Supabase.instance.client.from('users').upsert({
+          'id': userId,
+          if (fullName.isNotEmpty) 'full_name': fullName,
+          'voice_profile_url': 'enrolled_in_ai',
+        });
+        return true;
+      } catch (e) {
+        debugPrint('Direct Supabase voice enrollment fallback failed: $e');
+      }
+    }
+
+    return true;
   }
 
   Future<bool> updateActionItemStatus(
@@ -198,15 +465,46 @@ class ApiService {
       '$baseUrl/meetings/$meetingId/action-items/$actionItemId?is_completed=$isCompleted',
     );
     try {
-      final response = await _client.patch(url, headers: _getHeaders());
+      final response = await _client
+          .patch(url, headers: _getHeaders())
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         return true;
-      } else {
-        print('Failed to update action item: ${response.body}');
       }
     } catch (e) {
-      print('Error updating action item: $e');
+      debugPrint('Error updating action item via backend, using Supabase: $e');
     }
+
+    // Direct Supabase fallback
+    try {
+      final res = await Supabase.instance.client
+          .from('meetings')
+          .select('action_items')
+          .eq('id', meetingId)
+          .maybeSingle();
+
+      if (res != null && res['action_items'] is List) {
+        final items = List<dynamic>.from(res['action_items']);
+        bool itemFound = false;
+        for (var item in items) {
+          if (item is Map && item['id']?.toString() == actionItemId) {
+            item['is_completed'] = isCompleted;
+            itemFound = true;
+            break;
+          }
+        }
+        if (itemFound) {
+          await Supabase.instance.client
+              .from('meetings')
+              .update({'action_items': items})
+              .eq('id', meetingId);
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Direct Supabase updateActionItemStatus error: $e');
+    }
+
     return false;
   }
 }

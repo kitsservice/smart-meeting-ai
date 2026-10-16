@@ -13,3 +13,5 @@ scipy
 soundfile
 google-genai
 python-multipart
+sentence-transformers
+aiofiles

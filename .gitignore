@@ -14,12 +14,14 @@ backend/__pycache__/
 backend/.pytest_cache/
 backend/.ruff_cache/
 backend/temp_audio/
+backend/saved_audio/
 backend/pretrained_models/
 backend/.env
 backend/*.wav
 backend/*.mp3
 
 # Frontend
+frontend/.env
 frontend/.dart_tool/
 frontend/build/
 frontend/android/.gradle/
@@ -30,3 +32,8 @@ frontend/macos/Pods/
 frontend/macos/Flutter/ephemeral/
 frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
+
+# Artifacts & Release Binaries
+*.aab
+*.apk
+*.pem

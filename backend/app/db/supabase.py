@@ -3,7 +3,7 @@ from supabase import Client, create_client
 from app.core.config import settings
 
 # Cached singleton instance of the client to avoid recreating on every request
-_supabase_client: Client = None
+_supabase_client: Client | None = None
 
 
 def get_supabase_client() -> Client:

@@ -1,4 +1,8 @@
+import os
+
 from pydantic_settings import BaseSettings
+
+_ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 
 
 class Settings(BaseSettings):
@@ -22,7 +26,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     class Config:
-        env_file = ".env"
+        env_file = _ENV_PATH
+        extra = "ignore"
 
 
 settings = Settings()

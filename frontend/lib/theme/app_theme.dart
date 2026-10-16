@@ -42,6 +42,37 @@ class AppTheme {
     end: Alignment.topRight,
   );
 
+  // Standard Radii System
+  static const double radiusCard = 16.0;
+  static const double radiusButton = 12.0;
+  static const double radiusChip = 8.0;
+
+  // Adaptive Helpers for Light / Dark Mode
+  static Color cardBg(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? const Color(0xFF1E293B) : Colors.white;
+  }
+
+  static Color cardBorder(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : dividerColor.withValues(alpha: 0.85);
+  }
+
+  static List<BoxShadow> cardShadow(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return [
+      BoxShadow(
+        color: isDark
+            ? Colors.black.withValues(alpha: 0.3)
+            : Colors.black.withValues(alpha: 0.03),
+        blurRadius: 10,
+        offset: const Offset(0, 3),
+      ),
+    ];
+  }
+
   static ThemeData get lightTheme {
     return ThemeData(
       primaryColor: primaryColor,

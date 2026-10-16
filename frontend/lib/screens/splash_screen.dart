@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,56 +10,66 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _introController;
-  late AnimationController _waveController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  Timer? _navTimer;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Intro animation (fade and scale up)
     _introController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _introController, curve: Curves.easeIn),
-    );
-    
+
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _introController, curve: Curves.easeIn));
+
     _scaleAnimation = Tween<double>(begin: 0.85, end: 1).animate(
       CurvedAnimation(parent: _introController, curve: Curves.easeOutBack),
     );
 
-    // Continuous wave animation
-    _waveController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-
     _introController.forward();
 
     // Check auth and navigate after animation
-    Timer(const Duration(milliseconds: 2500), () async {
+    _navTimer = Timer(const Duration(milliseconds: 2500), () async {
+      final prefs = await SharedPreferences.getInstance();
+      final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
       if (!mounted) return;
+
+      if (!hasSeenOnboarding) {
+        Navigator.pushReplacementNamed(context, '/onboarding');
+        return;
+      }
+
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         try {
           final data = await Supabase.instance.client
               .from('users')
-              .select('voice_profile_url')
+              .select('voice_profile_url, voice_embedding')
               .eq('id', session.user.id)
-              .single();
-          if (data['voice_profile_url'] == null ||
-              data['voice_profile_url'].toString().isEmpty) {
+              .maybeSingle();
+          if (!mounted) return;
+          final hasVoiceProfile = data != null &&
+              ((data['voice_profile_url'] != null &&
+                      data['voice_profile_url'].toString().isNotEmpty) ||
+                  (data['voice_embedding'] != null));
+          if (!hasVoiceProfile) {
             Navigator.pushReplacementNamed(context, '/voice_setup');
           } else {
             Navigator.pushReplacementNamed(context, '/home');
           }
         } catch (e) {
+          if (!mounted) return;
           Navigator.pushReplacementNamed(context, '/voice_setup');
         }
       } else {
@@ -70,37 +80,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   void dispose() {
+    _navTimer?.cancel();
     _introController.dispose();
-    _waveController.dispose();
     super.dispose();
-  }
-
-  Widget _buildSoundWave(double height, int index) {
-    return AnimatedBuilder(
-      animation: _waveController,
-      builder: (context, child) {
-        // Offset each wave slightly to create a ripple effect
-        final phaseOffset = index * 0.4;
-        final scale = 0.5 + 0.5 * math.sin((_waveController.value * math.pi) + phaseOffset);
-        
-        return Container(
-          width: 6,
-          height: height * (0.6 + 0.4 * scale), // Smooth scale bounds
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.8 * scale),
-                blurRadius: 10 * scale,
-                spreadRadius: 2 * scale,
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -130,62 +112,29 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               children: [
                 // Animated Premium Logo
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 36),
+                  width: 140,
+                  height: 140,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    shape: BoxShape.rectangle,
-                    borderRadius: const BorderRadius.all(Radius.circular(999)),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      width: 1.5,
-                    ),
+                    shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF4364F7).withValues(alpha: 0.3),
+                        color: const Color(0xFF4364F7).withValues(alpha: 0.5),
                         blurRadius: 40,
                         spreadRadius: 10,
                       ),
                     ],
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Premium AI Microphone Icon
-                      const Icon(
-                        Icons.mic_rounded,
-                        size: 56,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black26,
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
-                      // Animated AI Soundwaves
-                      SizedBox(
-                        height: 50, // Fixed height bound for waves
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            _buildSoundWave(24, 0),
-                            _buildSoundWave(40, 1),
-                            _buildSoundWave(50, 2),
-                            _buildSoundWave(36, 3),
-                            _buildSoundWave(28, 4),
-                          ],
-                        ),
-                      ),
-                    ],
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/icon/app_icon.jpg',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 36),
                 // Modern Typography
                 const Text(
-                  'Smart Meeting AI',
+                  'Smart Meeting',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
