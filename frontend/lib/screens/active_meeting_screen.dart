@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/offline_queue.dart';
 import '../services/room_service.dart';
+import '../services/foreground_service.dart';
 import '../theme/app_theme.dart';
 
 class ActiveMeetingScreen extends ConsumerStatefulWidget {
@@ -170,6 +171,17 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
 
         setState(() => isRecording = true);
         _startTimer();
+
+        // Start Foreground Service to guarantee uninterrupted recording when phone is locked
+        try {
+          if (mounted) {
+            final args =
+                ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+            final title = args?['title'] ??
+                "Meeting ${DateTime.now().toLocal().toString().split(' ')[0]}";
+            MeetingForegroundService().startRecordingService(meetingTitle: title);
+          }
+        } catch (_) {}
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1016,6 +1028,9 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
 
   @override
   void dispose() {
+    if (isRecording && !isProcessing) {
+      MeetingForegroundService().stopService();
+    }
     _floatingBannerTimer?.cancel();
     _presenceSyncTimer?.cancel();
     _roomChannel?.unsubscribe();
@@ -1217,6 +1232,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
       // Mark matching scheduled meeting as completed in SharedPreferences
       await _markScheduledMeetingCompleted(meetingTitle);
 
+      // Update Foreground Service so Android does not kill upload/transcription in background
+      MeetingForegroundService().updateToSavingAndTranscribing(
+        meetingTitle: meetingTitle,
+      );
+
       // Save and queue for transcription
       await OfflineQueueService().queueMeeting(
         meetingTitle,
@@ -1251,6 +1271,9 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
         );
       }
     } else {
+      // User chose to discard recording
+      MeetingForegroundService().stopService();
+
       if (roomCode != null) {
         RoomService().markRoomCompleted(
           roomCode!,

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'api_service.dart';
+import 'foreground_service.dart';
 
 class OfflineQueueService {
   static const String _queueKey = 'offline_upload_queue';
@@ -168,6 +169,12 @@ class OfflineQueueService {
 
       // Save remaining items
       await prefs.setStringList(_queueKey, remainingQueue);
+
+      // When all pending recordings are successfully uploaded & queued for transcription,
+      // safely stop the foreground service.
+      if (remainingQueue.isEmpty) {
+        MeetingForegroundService().stopService();
+      }
     } finally {
       _isSyncing = false;
     }

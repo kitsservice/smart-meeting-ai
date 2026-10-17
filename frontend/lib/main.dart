@@ -19,9 +19,13 @@ import 'screens/settings_screen.dart';
 import 'screens/help_support_screen.dart';
 
 import 'services/notification_service.dart';
+import 'services/foreground_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Foreground Service for background recording & transcription
+  MeetingForegroundService().init();
 
   // Load environment variables
   await dotenv.load(fileName: ".env");
