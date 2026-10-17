@@ -16,7 +16,42 @@ class ApiService {
     return null;
   }
 
+  static const String defaultProdUrl =
+      'https://smart-meeting-ai-7qub.onrender.com/api/v1';
+
+  static bool _isLocalAddress(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('127.0.0.1') ||
+        lower.contains('localhost') ||
+        lower.contains('10.0.2.2') ||
+        lower.contains('192.168.') ||
+        lower.contains('10.169.');
+  }
+
   static List<String> get candidateBaseUrls {
+    if (kReleaseMode) {
+      // In production release mode, ONLY connect to secure HTTPS cloud endpoints!
+      // Never attempt private LAN IPs on a user's phone.
+      final list = <String>[];
+      if (_cachedBaseUrl != null &&
+          _cachedBaseUrl!.startsWith('https://') &&
+          !_isLocalAddress(_cachedBaseUrl!)) {
+        list.add(_cachedBaseUrl!);
+      }
+      final configured = _getEnv('PROD_API_BASE_URL')?.trim() ??
+          _getEnv('API_BASE_URL')?.trim();
+      if (configured != null &&
+          configured.startsWith('https://') &&
+          !_isLocalAddress(configured) &&
+          !list.contains(configured)) {
+        list.add(configured);
+      }
+      if (!list.contains(defaultProdUrl)) {
+        list.add(defaultProdUrl);
+      }
+      return list;
+    }
+
     final list = <String>[];
     if (_cachedBaseUrl != null && _cachedBaseUrl!.isNotEmpty) {
       list.add(_cachedBaseUrl!);
@@ -27,10 +62,7 @@ class ApiService {
     }
     const defaults = [
       'http://127.0.0.1:8000/api/v1',
-      'http://10.169.93.32:8000/api/v1',
-      'http://192.168.1.5:8000/api/v1',
       'http://10.0.2.2:8000/api/v1',
-      'http://localhost:8000/api/v1',
       'https://smart-meeting-ai-7qub.onrender.com/api/v1',
     ];
     for (final d in defaults) {
@@ -43,15 +75,14 @@ class ApiService {
     if (_cachedBaseUrl != null) return _cachedBaseUrl!;
 
     if (kReleaseMode) {
-      final prodUrl = _getEnv('PROD_API_BASE_URL') ?? _getEnv('API_BASE_URL');
+      final prodUrl = _getEnv('PROD_API_BASE_URL')?.trim() ??
+          _getEnv('API_BASE_URL')?.trim();
       if (prodUrl != null &&
-          prodUrl.trim().isNotEmpty &&
-          !prodUrl.contains('192.168.') &&
-          !prodUrl.contains('localhost') &&
-          !prodUrl.contains('10.0.2.2')) {
-        return prodUrl.trim();
+          prodUrl.startsWith('https://') &&
+          !_isLocalAddress(prodUrl)) {
+        return prodUrl;
       }
-      return 'https://smart-meeting-ai-7qub.onrender.com/api/v1';
+      return defaultProdUrl;
     } else {
       final configuredUrl = _getEnv('API_BASE_URL')?.trim();
       if (configuredUrl != null && configuredUrl.isNotEmpty) {
@@ -337,7 +368,7 @@ class ApiService {
     return null;
   }
 
-  Future<void> processAudio(String meetingId, String filePath) async {
+  Future<bool> processAudio(String meetingId, String filePath) async {
     for (final base in candidateBaseUrls) {
       final url = Uri.parse('$base/meetings/$meetingId/process-audio');
 
@@ -353,10 +384,10 @@ class ApiService {
             .timeout(const Duration(seconds: 90));
         final response = await http.Response.fromStream(streamedResponse);
 
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 || response.statusCode == 201) {
           debugPrint('Audio processed successfully on $base!');
           _cachedBaseUrl = base;
-          return;
+          return true;
         } else {
           debugPrint('Failed to process audio on $base: ${response.body}');
         }
@@ -364,6 +395,7 @@ class ApiService {
         debugPrint('Error processing audio on $base: $e');
       }
     }
+    return false;
   }
 
   Future<List<dynamic>> searchSemanticMeetings(String query) async {

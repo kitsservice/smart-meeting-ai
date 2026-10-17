@@ -111,33 +111,54 @@ class OfflineQueueService {
             continue;
           }
 
-          // 1. Create meeting
-          final String? meetingId = await _apiService.createMeeting(
-            data['title'],
-            data['description'],
-          );
+          // 1. Create meeting (if not already created on a previous attempt)
+          String? meetingId = data['meetingId'] as String?;
+          if (meetingId == null || meetingId.isEmpty) {
+            meetingId = await _apiService.createMeeting(
+              data['title'],
+              data['description'],
+            );
+            if (meetingId != null) {
+              data['meetingId'] = meetingId;
+            }
+          }
 
           // 2. Upload audio
           if (meetingId != null) {
-            await _apiService.processAudio(meetingId, filePath);
-            debugPrint('Successfully synced offline meeting: ${data['title']}');
+            final bool uploadSuccess =
+                await _apiService.processAudio(meetingId, filePath);
 
-            final notifsKey = 'app_notifications_$currentUserId';
-            final notifs = prefs.getStringList(notifsKey) ?? [];
-            notifs.insert(
-              0,
-              jsonEncode({
-                'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                'title': 'Transcription Complete',
-                'body':
-                    'Your meeting "${data['title']}" has been successfully transcribed and summarized.',
-                'timestamp': DateTime.now().toIso8601String(),
-                'isRead': false,
-              }),
-            );
-            await prefs.setStringList(notifsKey, notifs);
+            if (uploadSuccess) {
+              debugPrint('Successfully synced offline meeting: ${data['title']}');
+
+              final notifsKey = 'app_notifications_$currentUserId';
+              final notifs = prefs.getStringList(notifsKey) ?? [];
+              notifs.insert(
+                0,
+                jsonEncode({
+                  'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                  'title': 'Transcription in Progress',
+                  'body':
+                      'Your meeting "${data['title']}" is being transcribed by AI. Summary will be available shortly.',
+                  'timestamp': DateTime.now().toIso8601String(),
+                  'isRead': false,
+                }),
+              );
+              await prefs.setStringList(notifsKey, notifs);
+
+              // Clean up temporary audio file after successful cloud ingestion
+              try {
+                final file = File(filePath);
+                if (file.existsSync()) {
+                  file.deleteSync();
+                }
+              } catch (_) {}
+            } else {
+              debugPrint('Audio upload failed for meeting $meetingId. Keeping in queue to retry.');
+              remainingQueue.add(jsonEncode(data)); // Keep with saved meetingId to retry upload!
+            }
           } else {
-            remainingQueue.add(item); // Keep in queue if creation failed
+            remainingQueue.add(jsonEncode(data)); // Keep in queue if creation failed
           }
         } catch (e) {
           debugPrint('Error syncing item: $e');
