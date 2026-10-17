@@ -48,6 +48,16 @@ def root():
     }
 
 
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "version": "2.0.1",
+        "supabase_configured": bool(settings.SUPABASE_URL and settings.SUPABASE_KEY),
+    }
+
+
+
 if __name__ == "__main__":
     import os
 

@@ -11,8 +11,14 @@ def get_supabase_client() -> Client:
     if _supabase_client is not None:
         return _supabase_client
 
-    if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-        raise ValueError("Supabase URL and Key must be provided in the .env file")
+    url = (settings.SUPABASE_URL or "").strip()
+    key = (settings.SUPABASE_KEY or "").strip()
 
-    _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    if not url or not key:
+        from app.core.config import DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_KEY
+        url = url or DEFAULT_SUPABASE_URL
+        key = key or DEFAULT_SUPABASE_KEY
+
+    _supabase_client = create_client(url, key)
     return _supabase_client
+
