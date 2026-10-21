@@ -23,11 +23,49 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
+  final Set<int> _activatedTabs = {0};
+
+  void _switchTab(int index) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _activatedTabs.add(index);
+      _currentIndex = index;
+    });
+  }
+
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
   List<String> _manualNotes = [];
   String _noteSearchQuery = '';
   final TextEditingController _noteSearchController = TextEditingController();
+
+  List<dynamic>? _lastCalculatedMeetings;
+  int _cachedSummaryCount = 0;
+  int _cachedPendingTasksCount = 0;
+
+  void _updateMeetingStats(List<dynamic>? meetings) {
+    if (identical(_lastCalculatedMeetings, meetings)) return;
+    _lastCalculatedMeetings = meetings;
+    int sCount = 0;
+    int pCount = 0;
+    if (meetings != null) {
+      for (var m in meetings) {
+        if (m['summary'] != null && m['summary'].toString().trim().isNotEmpty) {
+          sCount++;
+        }
+        final items = m['action_items'];
+        if (items is List) {
+          for (var item in items) {
+            if (item is Map && item['is_completed'] == false) {
+              pCount++;
+            }
+          }
+        }
+      }
+    }
+    _cachedSummaryCount = sCount;
+    _cachedPendingTasksCount = pCount;
+  }
 
   String get _notesKey {
     final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
@@ -941,26 +979,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final user = Supabase.instance.client.auth.currentUser;
     final userName = user?.userMetadata?['full_name'] ?? 'KITS User';
 
-    // RIVERPOD STATE INJECTION
+    // RIVERPOD STATE INJECTION (Memoized stats calculation)
     final meetingsState = ref.watch(meetingsProvider);
-    final meetingCount = meetingsState.value?.length ?? 0;
-
-    int summaryCount = 0;
-    int pendingTasksCount = 0;
-    if (meetingsState.value != null) {
-      for (var m in meetingsState.value!) {
-        if (m['summary'] != null && m['summary'].toString().trim().isNotEmpty) {
-          summaryCount++;
-        }
-        if (m['action_items'] != null && m['action_items'] is List) {
-          for (var item in m['action_items']) {
-            if (item is Map && item['is_completed'] == false) {
-              pendingTasksCount++;
-            }
-          }
-        }
-      }
-    }
+    final meetingsList = meetingsState.value;
+    final meetingCount = meetingsList?.length ?? 0;
+    _updateMeetingStats(meetingsList);
+    final summaryCount = _cachedSummaryCount;
+    final pendingTasksCount = _cachedPendingTasksCount;
 
     final hasUnread = ref.watch(notificationsProvider.notifier).hasUnread;
 
@@ -1087,11 +1112,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               ),
                               const SizedBox(width: 12),
                               GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _currentIndex = 4;
-                                  });
-                                },
+                                onTap: () => _switchTab(4),
                                 child: Container(
                                   decoration: BoxDecoration(
                                     borderRadius: const BorderRadius.all(
@@ -1225,8 +1246,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  SlideTransition(
-                                    position: _slideAnimation,
+                                  RepaintBoundary(
+                                    child: SlideTransition(
+                                      position: _slideAnimation,
                                     child: Container(
                                       padding: const EdgeInsets.all(12), 
                                       decoration: BoxDecoration(
@@ -1248,6 +1270,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                       ), 
                                     ),
                                   ),
+                                ),
                                   const SizedBox(width: 16), 
                                   const Expanded(
                                     child: Column(
@@ -1368,7 +1391,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           // Schedule
                           Expanded(
                             child: GestureDetector(
-                              onTap: () => setState(() => _currentIndex = 2), // Navigate to Schedule tab
+                              onTap: () => _switchTab(2), // Navigate to Schedule tab
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -1407,51 +1430,106 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         crossAxisCount: 2,
                         mainAxisSpacing: 16,
                         crossAxisSpacing: 16,
-                        childAspectRatio:
-                            0.85, // adjusted for the new taller layout
-                        children:
-                            [
-                                  buildGridCard(
-                                    Icons.calendar_today_rounded,
-                                    'My Meetings',
-                                    'View and manage your recorded meetings',
-                                    '$meetingCount recorded',
-                                    AppTheme.primaryColor,
-                                    () => setState(() => _currentIndex = 1),
+                        childAspectRatio: 0.82,
+                        children: [
+                          buildGridCard(
+                            title: 'My Meetings',
+                            subtitle: 'View and manage your recorded meetings',
+                            chipText: '$meetingCount recorded',
+                            onTap: () => _switchTab(1),
+                            iconWidget: const Icon(
+                              Icons.calendar_month_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            iconGradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF007DFE), Color(0xFF0056DF)],
+                            ),
+                            wave1Color: const Color(0xFFE2EFFF),
+                            wave2Color: const Color(0xFFBFDBFE),
+                            chipBgColor: const Color(0xFFE0EFFF),
+                            chipTextColor: const Color(0xFF1E60F0),
+                          ),
+                          buildGridCard(
+                            title: 'Summaries',
+                            subtitle: 'Get AI-powered summaries and key insights',
+                            chipText: '$summaryCount generated',
+                            onTap: () => _switchTab(1),
+                            iconWidget: const Icon(
+                              Icons.description_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            iconGradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF00C853), Color(0xFF009624)],
+                            ),
+                            wave1Color: const Color(0xFFE6F8EF),
+                            wave2Color: const Color(0xFFA7F3D0),
+                            chipBgColor: const Color(0xFFDCFCE7),
+                            chipTextColor: const Color(0xFF059669),
+                          ),
+                          buildGridCard(
+                            title: 'Action Items',
+                            subtitle: 'Track your tasks and never miss anything',
+                            chipText: '$pendingTasksCount pending',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ActionItemsScreen(),
+                              ),
+                            ),
+                            iconWidget: Center(
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.check_rounded,
+                                    color: Color(0xFFFF6F00),
+                                    size: 15,
                                   ),
-                                  buildGridCard(
-                                    Icons.text_snippet_rounded,
-                                    'Summaries',
-                                    'Get AI-powered summaries and key insights',
-                                    '$summaryCount generated',
-                                    AppTheme.accentColor,
-                                    () => setState(() => _currentIndex = 1),
-                                  ),
-                                  buildGridCard(
-                                    Icons.check_circle_outline_rounded,
-                                    'Action Items',
-                                    'Track your tasks and never miss anything',
-                                    '$pendingTasksCount pending',
-                                    const Color(0xFFF59E0B),
-                                    () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const ActionItemsScreen(),
-                                      ),
-                                    ),
-                                  ),
-                                  buildGridCard(
-                                    Icons.edit_document,
-                                    'Notes',
-                                    'Capture important points and ideas',
-                                    '${_manualNotes.length} notes',
-                                    const Color(
-                                      0xFF8B5CF6,
-                                    ), // Purple color from the UI image
-                                    () => setState(() => _currentIndex = 3),
-                                  ),
-                                ],
+                                ),
+                              ),
+                            ),
+                            iconGradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFFFA000), Color(0xFFFF6F00)],
+                            ),
+                            wave1Color: const Color(0xFFFFF1DF),
+                            wave2Color: const Color(0xFFFED7AA),
+                            chipBgColor: const Color(0xFFFEF3C7),
+                            chipTextColor: const Color(0xFFD97706),
+                          ),
+                          buildGridCard(
+                            title: 'Notes',
+                            subtitle: 'Capture important points and ideas',
+                            chipText: '${_manualNotes.length} notes',
+                            onTap: () => _switchTab(3),
+                            iconWidget: const Icon(
+                              Icons.note_alt_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            iconGradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                            ),
+                            wave1Color: const Color(0xFFF3E8FF),
+                            wave2Color: const Color(0xFFDDD6FE),
+                            chipBgColor: const Color(0xFFEDE9FE),
+                            chipTextColor: const Color(0xFF7C3AED),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -2343,26 +2421,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
+  Widget _buildTab(int index) {
+    if (!_activatedTabs.contains(index)) {
+      return const SizedBox.shrink();
+    }
+    switch (index) {
+      case 0:
+        return _buildHomeTab();
+      case 1:
+        return const MeetingsListScreen();
+      case 2:
+        return const ScheduleScreen();
+      case 3:
+        return _buildLibraryTab();
+      case 4:
+        return _buildProfileTab();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    _activatedTabs.add(_currentIndex);
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _buildHomeTab(),
-          const MeetingsListScreen(),
-          const ScheduleScreen(),
-          _buildLibraryTab(),
-          _buildProfileTab(),
+          _buildTab(0),
+          _buildTab(1),
+          _buildTab(2),
+          _buildTab(3),
+          _buildTab(4),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          HapticFeedback.selectionClick();
-          setState(() => _currentIndex = index);
-        },
+        onTap: _switchTab,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppTheme.primaryColor,
         unselectedItemColor: AppTheme.textSecondary,
@@ -2397,60 +2493,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget buildGridCard(
-    IconData icon,
-    String title,
-    String subtitle,
-    String chipText,
-    Color color,
-    VoidCallback onTap,
-  ) {
+  Widget buildGridCard({
+    required String title,
+    required String subtitle,
+    required String chipText,
+    required VoidCallback onTap,
+    required LinearGradient iconGradient,
+    required Widget iconWidget,
+    required Color wave1Color,
+    required Color wave2Color,
+    required Color chipBgColor,
+    required Color chipTextColor,
+  }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: isDarkMode ? AppTheme.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: AppTheme.dividerColor.withValues(
-              alpha: isDarkMode ? 0.1 : 0.4,
-            ),
+            color: isDarkMode
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFE2E8F0).withValues(alpha: 0.6),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              color: isDarkMode
+                  ? Colors.black.withValues(alpha: 0.3)
+                  : const Color(0xFF0F172A).withValues(alpha: 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+              spreadRadius: 0,
             ),
           ],
         ),
         child: Stack(
           children: [
-            // Decorative background shapes to mimic the waves
-            Positioned(
-              right: -30,
-              bottom: -40,
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.all(Radius.circular(999)),
-                  color: color.withValues(alpha: 0.08),
-                ),
-              ),
-            ),
-            Positioned(
-              right: -10,
-              bottom: -20,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.all(Radius.circular(999)),
-                  color: color.withValues(alpha: 0.05),
+            // Dual organic wave background in bottom-right corner (RepaintBoundary cached)
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: _CardWavePainter(
+                    wave1Color: isDarkMode
+                        ? wave1Color.withValues(alpha: 0.15)
+                        : wave1Color,
+                    wave2Color: isDarkMode
+                        ? wave2Color.withValues(alpha: 0.22)
+                        : wave2Color,
+                  ),
                 ),
               ),
             ),
@@ -2460,63 +2556,79 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Top Row: Squircle icon + Chevron
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(12),
+                          gradient: iconGradient,
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        child: Icon(icon, color: Colors.white, size: 24),
+                        child: Center(child: iconWidget),
                       ),
                       Icon(
                         Icons.arrow_forward_ios_rounded,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.5),
-                        size: 14,
+                        color: isDarkMode
+                            ? Colors.white38
+                            : const Color(0xFF94A3B8),
+                        size: 15,
                       ),
                     ],
                   ),
                   const Spacer(),
+                  // Title
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.textPrimary,
-                      letterSpacing: -0.3,
+                      fontWeight: FontWeight.w700,
+                      color: isDarkMode
+                          ? Colors.white
+                          : const Color(0xFF0F172A),
+                      letterSpacing: -0.2,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
+                  // Subtitle
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 11,
+                    style: TextStyle(
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w400,
-                      color: AppTheme.textSecondary,
-                      height: 1.3,
+                      color: isDarkMode
+                          ? Colors.white60
+                          : const Color(0xFF64748B),
+                      height: 1.25,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
+                  // Bottom Badge / Pill
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 10,
+                      vertical: 4.5,
                     ),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      color: isDarkMode
+                          ? chipTextColor.withValues(alpha: 0.15)
+                          : chipBgColor,
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       chipText,
                       style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode
+                            ? chipTextColor.withValues(alpha: 0.95)
+                            : chipTextColor,
+                        letterSpacing: -0.1,
                       ),
                     ),
                   ),
@@ -2670,3 +2782,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 }
 
+class _CardWavePainter extends CustomPainter {
+  final Color wave1Color;
+  final Color wave2Color;
+
+  const _CardWavePainter({
+    required this.wave1Color,
+    required this.wave2Color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // Outer smooth wave (layer 1)
+    final paint1 = Paint()
+      ..color = wave1Color
+      ..style = PaintingStyle.fill;
+
+    final path1 = Path();
+    path1.moveTo(w * 0.38, h);
+    path1.cubicTo(
+      w * 0.62, h * 0.88,
+      w * 0.72, h * 0.50,
+      w, h * 0.36,
+    );
+    path1.lineTo(w, h);
+    path1.close();
+    canvas.drawPath(path1, paint1);
+
+    // Inner smooth wave (layer 2 - corner accent)
+    final paint2 = Paint()
+      ..color = wave2Color
+      ..style = PaintingStyle.fill;
+
+    final path2 = Path();
+    path2.moveTo(w * 0.62, h);
+    path2.cubicTo(
+      w * 0.78, h * 0.90,
+      w * 0.85, h * 0.72,
+      w, h * 0.60,
+    );
+    path2.lineTo(w, h);
+    path2.close();
+    canvas.drawPath(path2, paint2);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardWavePainter oldDelegate) {
+    return oldDelegate.wave1Color != wave1Color ||
+        oldDelegate.wave2Color != wave2Color;
+  }
+}

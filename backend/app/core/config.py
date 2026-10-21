@@ -6,7 +6,11 @@ _ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file_
 
 
 DEFAULT_SUPABASE_URL = "https://dhrqllyezfwchvbeshpr.supabase.co"
-DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRocnFsbHllemZ3Y2h2YmVzaHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyMjk0MzksImV4cCI6MjEwNTgwNTQzOX0.J12NtMuLAPSPfRl1xtQLr6N887KUIKwsCfeca6qHR5I"
+DEFAULT_SUPABASE_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRocnFsbHllemZ3Y2h2YmVzaHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyMjk0MzksImV4cCI6MjEwNTgwNTQzOX0."
+    "J12NtMuLAPSPfRl1xtQLr6N887KUIKwsCfeca6qHR5I"
+)
 DEFAULT_SARVAM_KEY = "sk_yi4qngh0_kbKjo9swzbwaYDBzpUKddCqK"
 DEFAULT_DEEPGRAM_KEY = "b7640f6737a95fe71401c14e2d78bff12c77a200"
 

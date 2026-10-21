@@ -98,16 +98,22 @@ def get_meetings(user_id: str | None = None, db: Client = Depends(get_db)):
         return []
     try:
         clean_uid = user_id.strip()
-        data = (
-            db.table("meetings")
-            .select(
-                "id, title, description, created_at, summary, transcript, action_items, user_id"
-            )
-            .or_(f"user_id.eq.{clean_uid},description.ilike.%{clean_uid}%")
-            .order("created_at", desc=True)
-            .limit(50)
-            .execute()
+        is_uuid = False
+        try:
+            uuid.UUID(clean_uid)
+            is_uuid = True
+        except ValueError:
+            is_uuid = False
+
+        query = db.table("meetings").select(
+            "id, title, description, created_at, summary, transcript, action_items, user_id"
         )
+        if is_uuid:
+            query = query.or_(f"user_id.eq.{clean_uid},description.ilike.%{clean_uid}%")
+        else:
+            query = query.ilike("description", f"%{clean_uid}%")
+
+        data = query.order("created_at", desc=True).limit(50).execute()
         meetings = []
         for m in data.data or []:
             desc = m.get("description") or ""
@@ -272,6 +278,7 @@ def delete_meeting(meeting_id: str, db: Client = Depends(get_db)):
         # Securely delete child records first (in case ON DELETE CASCADE is not set)
         db.table("action_items").delete().eq("meeting_id", meeting_id).execute()
         db.table("meeting_notes").delete().eq("meeting_id", meeting_id).execute()
+        db.table("meeting_chunks").delete().eq("meeting_id", meeting_id).execute()
         db.table("meeting_embeddings").delete().eq("meeting_id", meeting_id).execute()
     except Exception as e:
         logger.warning(f"Error cascading deletes: {e}")
@@ -335,63 +342,6 @@ async def _process_and_save_audio(meeting_id: str, file_path: str, filename: str
             if not segments:
                 transcript = "No speech detected."
             else:
-                # 1.5. HYBRID OPTIONAL ENHANCEMENT:
-                # Only invoke Sarvam AI if an API key is configured
-                # AND segments need Indic refinement
-                if settings.SARVAM_API_KEY and len(segments) <= 30:
-                    try:
-
-                        def slice_audio():
-                            data, samplerate = sf.read(io.BytesIO(audio_bytes))
-                            return data, samplerate
-
-                        data, samplerate = await run_in_threadpool(slice_audio)
-
-                        async def fetch_sarvam_for_segment(seg):
-                            try:
-                                duration = seg["end"] - seg["start"]
-                                # Only refine segments that have speech > 0.8s
-                                if duration < 0.8:
-                                    return
-
-                                start_sec = max(0.0, seg["start"] - 0.2)
-                                end_sec = min(len(data) / samplerate, seg["end"] + 0.2)
-
-                                start_sample = int(start_sec * samplerate)
-                                end_sample = int(end_sec * samplerate)
-                                sliced_data = data[start_sample:end_sample]
-
-                                out_io = io.BytesIO()
-                                sf.write(
-                                    out_io,
-                                    sliced_data,
-                                    samplerate,
-                                    format="WAV",
-                                    subtype="PCM_16",
-                                )
-                                chunk_bytes = out_io.getvalue()
-
-                                text = await sarvam_service.transcribe_audio(chunk_bytes)
-                                if (
-                                    text
-                                    and not text.startswith("Error")
-                                    and "simulated transcript" not in text
-                                ):
-                                    seg["text"] = text
-                            except Exception as e:
-                                logger.debug(f"Sarvam segment error: {e}")
-
-                        # Limit concurrency to 3
-                        sarvam_sem = asyncio.Semaphore(3)
-
-                        async def sem_fetch(seg):
-                            async with sarvam_sem:
-                                await fetch_sarvam_for_segment(seg)
-
-                        await asyncio.gather(*(sem_fetch(seg) for seg in segments))
-                    except Exception as e:
-                        logger.warning(f"Hybrid Sarvam AI mapping skipped: {e}")
-
                 # 2. Extract Voice Signatures for each Speaker from the audio in a single pass
                 longest_segments = {}
                 for seg in segments:
@@ -410,21 +360,27 @@ async def _process_and_save_audio(meeting_id: str, file_path: str, filename: str
                 # Single-pass batch extraction: loads audio once into memory
                 speaker_name_map = {}
                 try:
-                    speaker_embeddings = await run_in_threadpool(
-                        voice_biometrics.extract_embeddings_for_speaker_segments,
-                        audio_bytes,
-                        longest_segments,
-                    )
-
-                    # 3. Fetch Enrolled Users with in-memory TTL cache
+                    # 1. Fetch Enrolled Users first with in-memory TTL cache
                     enrolled_users = await run_in_threadpool(get_cached_enrolled_users, db)
 
-                    # 4. Vectorized SIMD Match Speakers to Users in a single pass
-                    speaker_name_map = await run_in_threadpool(
-                        voice_biometrics.match_speakers_to_users,
-                        speaker_embeddings,
-                        enrolled_users,
-                    )
+                    # Only run heavy neural network voice extraction if enrolled users exist
+                    valid_enrolled = [
+                        u
+                        for u in (enrolled_users or [])
+                        if u.get("voice_embedding") and len(u.get("voice_embedding") or []) == 192
+                    ]
+
+                    if valid_enrolled:
+                        speaker_embeddings = await run_in_threadpool(
+                            voice_biometrics.extract_embeddings_for_speaker_segments,
+                            audio_bytes,
+                            longest_segments,
+                        )
+                        speaker_name_map = await run_in_threadpool(
+                            voice_biometrics.match_speakers_to_users,
+                            speaker_embeddings,
+                            valid_enrolled,
+                        )
                 except Exception as bio_err:
                     logger.warning(f"Voice biometrics matching bypassed: {bio_err}")
 
@@ -570,10 +526,10 @@ async def process_audio(
 
 
 @router.get("/{meeting_id}/audio")
-async def get_meeting_audio(
+def get_meeting_audio(
     meeting_id: str, user_id: str | None = None, db: Client = Depends(get_db)
 ):
-    """Streams the recorded audio for a meeting.
+    """Streams the recorded audio for a meeting in threadpool.
 
     Supports HTTP range requests for audio scrubbing and playback.
     """
@@ -610,12 +566,16 @@ async def search_meetings(query: str, user_id: str | None = None, db: Client = D
             return {"status": "success", "data": results}
 
         clean_uid = user_id.strip()
-        user_meetings_res = (
-            db.table("meetings")
-            .select("id")
-            .or_(f"user_id.eq.{clean_uid},description.ilike.%{clean_uid}%")
-            .execute()
-        )
+
+        def fetch_user_meetings():
+            return (
+                db.table("meetings")
+                .select("id")
+                .or_(f"user_id.eq.{clean_uid},description.ilike.%{clean_uid}%")
+                .execute()
+            )
+
+        user_meetings_res = await run_in_threadpool(fetch_user_meetings)
         allowed_ids = {m["id"] for m in (user_meetings_res.data or [])}
         filtered_results = [r for r in results if r.get("meeting_id") in allowed_ids]
         return {"status": "success", "data": filtered_results}

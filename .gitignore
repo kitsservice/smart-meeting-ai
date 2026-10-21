@@ -11,6 +11,8 @@
 # Backend
 backend/venv/
 backend/__pycache__/
+**/__pycache__/
+*.pyc
 backend/.pytest_cache/
 backend/.ruff_cache/
 backend/temp_audio/

@@ -15,7 +15,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _introController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
-  Timer? _navTimer;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -38,16 +38,17 @@ class _SplashScreenState extends State<SplashScreen>
 
     _introController.forward();
 
-    // Check auth and navigate after animation
-    _navTimer = Timer(const Duration(milliseconds: 2500), () async {
+    // Start auth resolution in parallel with the minimum branding presentation
+    _resolveNavigation();
+  }
+
+  Future<String> _determineNextRoute() async {
+    try {
       final prefs = await SharedPreferences.getInstance();
       final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
 
-      if (!mounted) return;
-
       if (!hasSeenOnboarding) {
-        Navigator.pushReplacementNamed(context, '/onboarding');
-        return;
+        return '/onboarding';
       }
 
       final session = Supabase.instance.client.auth.currentSession;
@@ -58,29 +59,39 @@ class _SplashScreenState extends State<SplashScreen>
               .select('voice_profile_url, voice_embedding')
               .eq('id', session.user.id)
               .maybeSingle();
-          if (!mounted) return;
+
           final hasVoiceProfile = data != null &&
               ((data['voice_profile_url'] != null &&
                       data['voice_profile_url'].toString().isNotEmpty) ||
                   (data['voice_embedding'] != null));
-          if (!hasVoiceProfile) {
-            Navigator.pushReplacementNamed(context, '/voice_setup');
-          } else {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-        } catch (e) {
-          if (!mounted) return;
-          Navigator.pushReplacementNamed(context, '/voice_setup');
+
+          return hasVoiceProfile ? '/home' : '/voice_setup';
+        } catch (_) {
+          return '/voice_setup';
         }
       } else {
-        Navigator.pushReplacementNamed(context, '/login');
+        return '/login';
       }
-    });
+    } catch (_) {
+      return '/login';
+    }
+  }
+
+  Future<void> _resolveNavigation() async {
+    // Run animation window & auth query concurrently for maximum launch speed
+    final minDisplayFuture = Future.delayed(const Duration(milliseconds: 1400));
+    final routeFuture = _determineNextRoute();
+
+    final results = await Future.wait([minDisplayFuture, routeFuture]);
+    if (!mounted || _navigated) return;
+    _navigated = true;
+
+    final targetRoute = results[1] as String;
+    Navigator.pushReplacementNamed(context, targetRoute);
   }
 
   @override
   void dispose() {
-    _navTimer?.cancel();
     _introController.dispose();
     super.dispose();
   }

@@ -26,7 +26,10 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshMeetings();
+      final currentData = ref.read(meetingsProvider).valueOrNull;
+      if (currentData == null || currentData.isEmpty) {
+        _refreshMeetings();
+      }
     });
   }
 
@@ -82,18 +85,25 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
         _isSemanticSearch ? _semanticResults : allMeetings;
 
     // Normal local filtering with date chips
-    final filteredMeetings = displayedMeetings.where((meeting) {
-      final title = (meeting['title'] ?? '').toString().toLowerCase();
-      final summary = (meeting['summary'] ?? '').toString().toLowerCase();
-      final matchesQuery = title.contains(query) || summary.contains(query);
-      if (!matchesQuery) return false;
+    final now = DateTime.now();
+    final hasQuery = query.isNotEmpty;
+    final isTodayFilter = _selectedFilter == 'Today';
+    final isWeekFilter = _selectedFilter == 'This Week';
 
-      if (_selectedFilter == 'Today') {
+    final filteredMeetings = displayedMeetings.where((meeting) {
+      if (hasQuery) {
+        final title = (meeting['title'] ?? '').toString().toLowerCase();
+        final summary = (meeting['summary'] ?? '').toString().toLowerCase();
+        if (!title.contains(query) && !summary.contains(query)) {
+          return false;
+        }
+      }
+
+      if (isTodayFilter) {
         final rawDate = meeting['created_at']?.toString() ?? '';
         if (rawDate.isNotEmpty) {
           try {
             final date = DateTime.parse(rawDate).toLocal();
-            final now = DateTime.now();
             return date.year == now.year &&
                 date.month == now.month &&
                 date.day == now.day;
@@ -102,12 +112,11 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
           }
         }
         return false;
-      } else if (_selectedFilter == 'This Week') {
+      } else if (isWeekFilter) {
         final rawDate = meeting['created_at']?.toString() ?? '';
         if (rawDate.isNotEmpty) {
           try {
             final date = DateTime.parse(rawDate).toLocal();
-            final now = DateTime.now();
             final difference = now.difference(date).inDays;
             return difference >= 0 && difference <= 7;
           } catch (_) {
@@ -538,16 +547,20 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
           }
         }
 
-        // Calculate original meeting duration efficiently without regex split allocations
+        // Calculate and cache meeting duration to avoid recalculating on every frame
         int durationMinutes = 0;
-        if (meeting.containsKey('duration_seconds') &&
+        if (meeting['_cached_duration'] is int) {
+          durationMinutes = meeting['_cached_duration'] as int;
+        } else if (meeting.containsKey('duration_seconds') &&
             meeting['duration_seconds'] != null) {
           durationMinutes = (meeting['duration_seconds'] as num).round() ~/ 60;
+          try { meeting['_cached_duration'] = durationMinutes; } catch (_) {}
         } else if (meeting['transcript'] != null) {
           final transcriptStr = meeting['transcript'].toString();
           if (transcriptStr.trim().isNotEmpty) {
             final wordCount = _fastWordCount(transcriptStr);
             durationMinutes = (wordCount / 130).ceil();
+            try { meeting['_cached_duration'] = durationMinutes; } catch (_) {}
           }
         }
 

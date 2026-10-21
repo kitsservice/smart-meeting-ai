@@ -5,3 +5,8 @@ from app.api.endpoints import meetings, users
 api_router = APIRouter()
 api_router.include_router(meetings.router, prefix="/meetings", tags=["meetings"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+
+
+@api_router.get("/health")
+def api_health():
+    return {"status": "healthy"}

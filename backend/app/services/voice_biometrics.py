@@ -54,12 +54,16 @@ class VoiceBiometricsService:
     def classifier(self):
         if self._classifier is None:
             logger.info("Loading SpeechBrain Voice Biometrics Model...")
-            # Load the ECAPA-TDNN model lazily
-            self._classifier = EncoderClassifier.from_hparams(
-                source="speechbrain/spkrec-ecapa-voxceleb",
-                savedir="pretrained_models/spkrec-ecapa-voxceleb",
-                run_opts={"device": "cuda" if torch.cuda.is_available() else "cpu"},
-            )
+            try:
+                # Load the ECAPA-TDNN model lazily
+                self._classifier = EncoderClassifier.from_hparams(
+                    source="speechbrain/spkrec-ecapa-voxceleb",
+                    savedir="pretrained_models/spkrec-ecapa-voxceleb",
+                    run_opts={"device": "cuda" if torch.cuda.is_available() else "cpu"},
+                )
+            except Exception as e:
+                logger.warning(f"SpeechBrain model could not be loaded: {e}")
+                return None
         return self._classifier
 
     def _get_resampler(self, sample_rate: int) -> torchaudio.transforms.Resample:
@@ -107,8 +111,12 @@ class VoiceBiometricsService:
         if waveform.shape[1] < 3200:
             return None
 
+        cls = self.classifier
+        if cls is None:
+            return None
+
         with torch.inference_mode():
-            embeddings = self.classifier.encode_batch(waveform)
+            embeddings = cls.encode_batch(waveform)
             return embeddings.squeeze().cpu().numpy().astype(np.float32)
 
     def extract_embedding_from_bytes(self, audio_bytes: bytes) -> list[float]:

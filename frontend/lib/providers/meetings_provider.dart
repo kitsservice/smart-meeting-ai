@@ -11,6 +11,7 @@ final meetingsProvider =
 
 class MeetingsNotifier extends StateNotifier<AsyncValue<List<dynamic>>> {
   StreamSubscription<AuthState>? _authSubscription;
+  Future<void>? _inFlightFetch;
 
   MeetingsNotifier() : super(const AsyncValue.loading()) {
     fetchMeetings();
@@ -46,6 +47,19 @@ class MeetingsNotifier extends StateNotifier<AsyncValue<List<dynamic>>> {
       return;
     }
 
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+
+    _inFlightFetch = _doFetchMeetings();
+    try {
+      await _inFlightFetch;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  Future<void> _doFetchMeetings() async {
     state = const AsyncLoading<List<dynamic>>().copyWithPrevious(state);
     try {
       final meetings = await ApiService().getMeetings();

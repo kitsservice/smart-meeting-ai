@@ -15,7 +15,7 @@ def get_supabase_client() -> Client:
     key = (settings.SUPABASE_KEY or "").strip()
 
     if not url or not key:
-        from app.core.config import DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_KEY
+        from app.core.config import DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL
         url = url or DEFAULT_SUPABASE_URL
         key = key or DEFAULT_SUPABASE_KEY
 

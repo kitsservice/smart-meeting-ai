@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApiService {
@@ -29,67 +30,84 @@ class ApiService {
   }
 
   static List<String> get candidateBaseUrls {
-    if (kReleaseMode) {
-      // In production release mode, ONLY connect to secure HTTPS cloud endpoints!
-      // Never attempt private LAN IPs on a user's phone.
-      final list = <String>[];
-      if (_cachedBaseUrl != null &&
-          _cachedBaseUrl!.startsWith('https://') &&
-          !_isLocalAddress(_cachedBaseUrl!)) {
-        list.add(_cachedBaseUrl!);
-      }
-      final configured = _getEnv('PROD_API_BASE_URL')?.trim() ??
-          _getEnv('API_BASE_URL')?.trim();
-      if (configured != null &&
-          configured.startsWith('https://') &&
-          !_isLocalAddress(configured) &&
-          !list.contains(configured)) {
-        list.add(configured);
-      }
-      if (!list.contains(defaultProdUrl)) {
-        list.add(defaultProdUrl);
-      }
-      return list;
-    }
-
     final list = <String>[];
     if (_cachedBaseUrl != null && _cachedBaseUrl!.isNotEmpty) {
       list.add(_cachedBaseUrl!);
     }
-    final configured = _getEnv('API_BASE_URL')?.trim();
-    if (configured != null && configured.isNotEmpty && !list.contains(configured)) {
+    final configured = _getEnv('PROD_API_BASE_URL')?.trim() ??
+        _getEnv('API_BASE_URL')?.trim();
+    if (configured != null &&
+        configured.isNotEmpty &&
+        !list.contains(configured)) {
       list.add(configured);
     }
-    const defaults = [
-      'http://127.0.0.1:8000/api/v1',
-      'http://10.0.2.2:8000/api/v1',
-      'https://smart-meeting-ai-7qub.onrender.com/api/v1',
-    ];
-    for (final d in defaults) {
-      if (!list.contains(d)) list.add(d);
+    if (!list.contains(defaultProdUrl)) {
+      list.add(defaultProdUrl);
+    }
+    // Only in local development debug mode include loopback
+    if (!kReleaseMode) {
+      const devDefaults = [
+        'http://127.0.0.1:8000/api/v1',
+        'http://10.0.2.2:8000/api/v1',
+      ];
+      for (final d in devDefaults) {
+        if (!list.contains(d)) list.add(d);
+      }
     }
     return list;
   }
 
-  static String get baseUrl {
-    if (_cachedBaseUrl != null) return _cachedBaseUrl!;
-
-    if (kReleaseMode) {
-      final prodUrl = _getEnv('PROD_API_BASE_URL')?.trim() ??
-          _getEnv('API_BASE_URL')?.trim();
-      if (prodUrl != null &&
-          prodUrl.startsWith('https://') &&
-          !_isLocalAddress(prodUrl)) {
-        return prodUrl;
-      }
-      return defaultProdUrl;
-    } else {
-      final configuredUrl = _getEnv('API_BASE_URL')?.trim();
-      if (configuredUrl != null && configuredUrl.isNotEmpty) {
-        return configuredUrl;
-      }
-      return 'http://127.0.0.1:8000/api/v1'; // Physical device via adb reverse or local
+  static Uri _getHealthUri(String base) {
+    if (base.endsWith('/api/v1')) {
+      return Uri.parse(base.replaceAll('/api/v1', '/health'));
     }
+    return Uri.parse('$base/health');
+  }
+
+  static Future<String> resolveBaseUrl() async {
+    if (_cachedBaseUrl != null && _cachedBaseUrl!.isNotEmpty) {
+      return _cachedBaseUrl!;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedUrl = prefs.getString('cached_api_base_url');
+      if (savedUrl != null && savedUrl.isNotEmpty) {
+        _cachedBaseUrl = savedUrl;
+        return savedUrl;
+      }
+    } catch (_) {}
+
+    // Fast probe candidates
+    for (final candidate in candidateBaseUrls) {
+      try {
+        final probeUri = _getHealthUri(candidate);
+        final res = await http.get(probeUri).timeout(const Duration(milliseconds: 1200));
+        if (res.statusCode == 200) {
+          _cachedBaseUrl = candidate;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('cached_api_base_url', candidate);
+          } catch (_) {}
+          return candidate;
+        }
+      } catch (_) {}
+    }
+
+    _cachedBaseUrl = defaultProdUrl;
+    return defaultProdUrl;
+  }
+
+  static String get baseUrl {
+    if (_cachedBaseUrl != null && _cachedBaseUrl!.isNotEmpty) return _cachedBaseUrl!;
+    final configured = _getEnv('API_BASE_URL')?.trim();
+    if (configured != null &&
+        configured.isNotEmpty &&
+        configured.startsWith('https://') &&
+        !_isLocalAddress(configured)) {
+      return configured;
+    }
+    return defaultProdUrl;
   }
 
   static final ApiService _instance = ApiService._internal();
@@ -121,39 +139,55 @@ class ApiService {
     return headers;
   }
 
+  Future<bool> _isBaseUrlAlive(String base) async {
+    try {
+      final rootUri = _getHealthUri(base);
+      final res = await _client.get(rootUri).timeout(const Duration(seconds: 2));
+      if (res.statusCode == 200) return true;
+    } catch (_) {}
+    try {
+      final apiUri = Uri.parse('$base/health');
+      final res = await _client.get(apiUri).timeout(const Duration(seconds: 2));
+      if (res.statusCode == 200) return true;
+    } catch (_) {}
+    return false;
+  }
+
   Future<List<dynamic>> getMeetings() async {
     final userId = _currentUserId ?? '';
     if (userId.isEmpty) {
       return []; // Return empty list immediately if not logged in
     }
-    final url = Uri.parse('$baseUrl/meetings/?user_id=$userId');
+
+    // 1. Authoritative direct Supabase query: instant (<100ms) with zero cold-start delay
     try {
+      final data = await Supabase.instance.client
+          .from('meetings')
+          .select('*')
+          .or('user_id.eq.$userId,description.ilike.%$userId%')
+          .order('created_at', ascending: false)
+          .limit(50);
+      return _filterValidMeetings(data as List<dynamic>);
+    } catch (e) {
+      debugPrint('Direct Supabase fetch failed: $e, falling back to backend...');
+    }
+
+    // 2. Resilient fallback to backend API
+    try {
+      final base = await resolveBaseUrl();
+      final url = Uri.parse('$base/meetings/?user_id=$userId');
       final response = await _client
           .get(url, headers: _getHeaders())
           .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
+        _cachedBaseUrl = base;
         final list = jsonDecode(response.body) as List<dynamic>;
         return _filterValidMeetings(list);
-      } else {
-        debugPrint('Backend HTTP ${response.statusCode}, falling back to Supabase: ${response.body}');
       }
     } catch (e) {
-      debugPrint('Backend fetch failed, attempting direct Supabase query: $e');
+      debugPrint('Backend meetings fetch fallback error: $e');
     }
 
-    // Direct Supabase fallback: return meetings owned by user OR joined via room code
-    if (userId.isNotEmpty) {
-      try {
-        final data = await Supabase.instance.client
-            .from('meetings')
-            .select('*')
-            .or('user_id.eq.$userId,description.ilike.%$userId%')
-            .order('created_at', ascending: false);
-        return _filterValidMeetings(data as List<dynamic>);
-      } catch (e) {
-        debugPrint('Direct Supabase fetch error: $e');
-      }
-    }
     return [];
   }
 
@@ -193,24 +227,8 @@ class ApiService {
     try {
       userId = Supabase.instance.client.auth.currentUser?.id ?? '';
     } catch (_) {}
-    final url = Uri.parse('$baseUrl/meetings/$meetingId?user_id=$userId');
-    try {
-      final response = await _client
-          .get(url, headers: _getHeaders())
-          .timeout(const Duration(seconds: 4));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      } else if (response.statusCode == 403) {
-        debugPrint('Security: Access denied to meeting $meetingId for user $userId');
-        return null;
-      } else {
-        debugPrint('Backend HTTP ${response.statusCode}, falling back to Supabase: ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('Backend getMeeting failed, attempting direct Supabase query: $e');
-    }
 
-    // Direct Supabase fallback: strictly verify the user is owner or participant
+    // 1. Authoritative direct Supabase query: instant and always current
     try {
       var query = Supabase.instance.client
           .from('meetings')
@@ -226,7 +244,25 @@ class ApiService {
         return Map<String, dynamic>.from(data);
       }
     } catch (e) {
-      debugPrint('Direct Supabase getMeeting error: $e');
+      debugPrint('Direct Supabase getMeeting error: $e, falling back to backend');
+    }
+
+    // 2. Resilient fallback to backend API
+    try {
+      final base = await resolveBaseUrl();
+      final url = Uri.parse('$base/meetings/$meetingId?user_id=$userId');
+      final response = await _client
+          .get(url, headers: _getHeaders())
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        _cachedBaseUrl = base;
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else if (response.statusCode == 403) {
+        debugPrint('Security: Access denied to meeting $meetingId for user $userId');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Backend getMeeting fallback failed: $e');
     }
 
     return null;
@@ -373,6 +409,12 @@ class ApiService {
       final url = Uri.parse('$base/meetings/$meetingId/process-audio');
 
       try {
+        // Fast probe before committing 90-second upload to an unverified candidate
+        if (_cachedBaseUrl != base) {
+          final isAlive = await _isBaseUrlAlive(base);
+          if (!isAlive) continue;
+        }
+
         var request = http.MultipartRequest('POST', url);
         request.headers.addAll(_getHeaders(isMultipart: true));
 
@@ -387,6 +429,10 @@ class ApiService {
         if (response.statusCode == 200 || response.statusCode == 201) {
           debugPrint('Audio processed successfully on $base!');
           _cachedBaseUrl = base;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('cached_api_base_url', base);
+          } catch (_) {}
           return true;
         } else {
           debugPrint('Failed to process audio on $base: ${response.body}');
@@ -439,6 +485,11 @@ class ApiService {
       );
 
       try {
+        if (_cachedBaseUrl != base) {
+          final isAlive = await _isBaseUrlAlive(base);
+          if (!isAlive) continue;
+        }
+
         debugPrint('Attempting voice enrollment at: $url');
         var request = http.MultipartRequest('POST', url);
         request.headers.addAll(_getHeaders(isMultipart: true));
@@ -448,12 +499,16 @@ class ApiService {
 
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 4));
+            .timeout(const Duration(seconds: 15));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {
           debugPrint('Voice enrolled successfully on $base!');
           _cachedBaseUrl = base;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('cached_api_base_url', base);
+          } catch (_) {}
           return true;
         } else {
           debugPrint('Failed to enroll voice on $base (${response.statusCode}): ${response.body}');

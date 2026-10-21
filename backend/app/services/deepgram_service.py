@@ -84,12 +84,13 @@ class DeepgramAIService:
         response.raise_for_status()
         response_data = response.json()
 
-        words = (
-            response_data.get("results", {})
-            .get("channels", [{}])[0]
-            .get("alternatives", [{}])[0]
-            .get("words", [])
-        )
+        channels = response_data.get("results", {}).get("channels", [])
+        if not channels:
+            return []
+        alternatives = channels[0].get("alternatives", [])
+        if not alternatives:
+            return []
+        words = alternatives[0].get("words", [])
 
         if not words:
             return []
@@ -196,7 +197,14 @@ Return the result EXACTLY in this JSON format without markdown wrapping:
                     content = content[:-3]
                 content = content.strip()
 
-                data = json.loads(content)
+                try:
+                    data = json.loads(content)
+                except json.JSONDecodeError:
+                    match = re.search(r"\{.*\}", content, re.DOTALL)
+                    if match:
+                        data = json.loads(match.group(0))
+                    else:
+                        raise
                 return {
                     "summary": data.get("summary", ""),
                     "action_items": data.get("action_items", []),

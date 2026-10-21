@@ -162,10 +162,15 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
       if (await _audioRecorder.hasPermission()) {
         final tempDir = await getTemporaryDirectory();
         final path =
-            '${tempDir.path}/meeting_${DateTime.now().millisecondsSinceEpoch}.wav';
+            '${tempDir.path}/meeting_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
         await _audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.wav),
+          const RecordConfig(
+            encoder: AudioEncoder.aacLc,
+            bitRate: 64000,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
           path: path,
         );
 
@@ -1845,46 +1850,48 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                     alignment: Alignment.center,
                                     children: [
                                       // Premium Pulse Rings
-                                      AnimatedBuilder(
-                                        animation: _animationController,
-                                        builder: (context, _) {
-                                          return Stack(
-                                            alignment: Alignment.center,
-                                            children: List.generate(3, (index) {
-                                              final delay = index * 0.33;
-                                              final double value =
-                                                  (_animationController.value +
-                                                          delay) %
-                                                      1.0;
-                                              final size = 120 + (value * 200);
-                                              return Container(
-                                                width: size,
-                                                height: size,
-                                                decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      const BorderRadius.all(
-                                                    Radius.circular(999),
-                                                  ),
-                                                  color: AppTheme.primaryColor
-                                                      .withValues(
-                                                    alpha: isRecording
-                                                        ? (1.0 - value) * 0.15
-                                                        : 0,
-                                                  ),
-                                                  border: Border.all(
+                                      RepaintBoundary(
+                                        child: AnimatedBuilder(
+                                          animation: _animationController,
+                                          builder: (context, _) {
+                                            return Stack(
+                                              alignment: Alignment.center,
+                                              children: List.generate(3, (index) {
+                                                final delay = index * 0.33;
+                                                final double value =
+                                                    (_animationController.value +
+                                                            delay) %
+                                                        1.0;
+                                                final size = 120 + (value * 200);
+                                                return Container(
+                                                  width: size,
+                                                  height: size,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        const BorderRadius.all(
+                                                      Radius.circular(999),
+                                                    ),
                                                     color: AppTheme.primaryColor
                                                         .withValues(
                                                       alpha: isRecording
-                                                          ? (1.0 - value) * 0.3
+                                                          ? (1.0 - value) * 0.15
                                                           : 0,
                                                     ),
-                                                    width: 1,
+                                                    border: Border.all(
+                                                      color: AppTheme.primaryColor
+                                                          .withValues(
+                                                        alpha: isRecording
+                                                            ? (1.0 - value) * 0.3
+                                                            : 0,
+                                                      ),
+                                                      width: 1,
+                                                    ),
                                                   ),
-                                                ),
-                                              );
-                                            }),
-                                          );
-                                        },
+                                                );
+                                              }),
+                                            );
+                                          },
+                                        ),
                                       ),
                                       // Central Mic Button (Glassmorphism)
                                       Container(

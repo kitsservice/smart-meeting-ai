@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
@@ -23,12 +24,64 @@ class MeetingDetailsScreen extends ConsumerStatefulWidget {
 }
 
 class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
+  static final RegExp _sentenceSplitRegex = RegExp(r'(?<=\.)\s+');
+  static final RegExp _timestampRegex = RegExp(r'\[(\d{1,2}):(\d{2})\]');
+  static final RegExp _timestampStripRegex = RegExp(r'\[\d{1,2}:\d{2}\]\s*');
   Map<String, dynamic>? _fullMeeting;
   bool _isLoading = true;
   bool _isFullTextView = false;
   List<String> _meetingNotes = [];
 
   bool _hasFetched = false;
+  String? _cachedTranscript;
+  List<_TranscriptSegment> _cachedSegments = [];
+  Timer? _pollingTimer;
+
+  void _startPollingIfNeeded(String id) {
+    _pollingTimer?.cancel();
+    final clean = (_fullMeeting?['transcript'] ?? '').toString().trim();
+    final isDone = clean.isNotEmpty &&
+        clean != 'null' &&
+        clean != 'NONE' &&
+        clean != 'Loading transcript...' &&
+        clean != 'No transcript available.' &&
+        clean != 'No speech detected.' &&
+        clean != 'Transcription could not be completed.';
+
+    if (!isDone) {
+      _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        await _fetchFullDetails(id, background: true);
+        final updated = (_fullMeeting?['transcript'] ?? '').toString().trim();
+        if (updated.isNotEmpty &&
+            updated != 'null' &&
+            updated != 'NONE' &&
+            updated != 'Loading transcript...' &&
+            updated != 'No transcript available.') {
+          timer.cancel();
+          ref.read(meetingsProvider.notifier).fetchMeetings();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  List<_TranscriptSegment> _getSegments(String transcript) {
+    if (_cachedTranscript == transcript && _cachedSegments.isNotEmpty) {
+      return _cachedSegments;
+    }
+    _cachedTranscript = transcript;
+    _cachedSegments = _parseTranscriptSegments(transcript);
+    return _cachedSegments;
+  }
 
   @override
   void didChangeDependencies() {
@@ -45,9 +98,11 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
         // Instant render: if meeting already has data, display immediately
         _isLoading = !hasTranscript && !hasSummary;
         _fetchFullDetails(args['id'].toString(), background: hasTranscript || hasSummary);
+        _startPollingIfNeeded(args['id'].toString());
       } else if (args is String && args.isNotEmpty) {
         _hasFetched = true;
         _fetchFullDetails(args);
+        _startPollingIfNeeded(args);
       }
     }
   }
@@ -90,7 +145,14 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
           _fullMeeting = details;
         }
         _meetingNotes = localNotes;
-        _isLoading = false;
+        final t = (_fullMeeting?['transcript'] ?? '').toString().trim();
+        final hasTranscript = t.isNotEmpty &&
+            t != 'null' &&
+            t != 'NONE' &&
+            t != 'Loading transcript...' &&
+            t != 'No transcript available.';
+        final hasSummary = (_fullMeeting?['summary'] ?? '').toString().trim().isNotEmpty;
+        _isLoading = !hasTranscript && !hasSummary;
       });
     }
   }
@@ -177,6 +239,83 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
     );
   }
 
+  Widget _buildTopToggle() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg(context),
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(
+          color: AppTheme.cardBorder(context),
+          width: 1.0,
+        ),
+        boxShadow: AppTheme.cardShadow(context),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _isFullTextView = false),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: !_isFullTextView
+                          ? AppTheme.primaryColor
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    'Live',
+                    style: TextStyle(
+                      color: !_isFullTextView
+                          ? AppTheme.primaryColor
+                          : AppTheme.textSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _isFullTextView = true),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _isFullTextView
+                          ? AppTheme.primaryColor
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    'Full Text',
+                    style: TextStyle(
+                      color: _isFullTextView
+                          ? AppTheme.primaryColor
+                          : AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFullTextView(String transcript, String? meetingId) {
     final clean = transcript.trim();
     final bool isNoSpeech = clean == 'No speech detected.';
@@ -194,10 +333,42 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
       );
     }
 
-    final segments = _parseTranscriptSegments(transcript);
+    final segments = _getSegments(transcript);
+    final spans = <InlineSpan>[];
+    for (int i = 0; i < segments.length; i++) {
+      final seg = segments[i];
+      if (seg.timeString != null) {
+        spans.add(
+          TextSpan(
+            text: '[${seg.timeString}] ',
+            style: const TextStyle(
+              color: AppTheme.primaryColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        );
+      }
+      spans.add(
+        TextSpan(
+          text: '${seg.speaker}: ',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: seg.speakerColor,
+          ),
+        ),
+      );
+      spans.add(
+        TextSpan(
+          text: i < segments.length - 1 ? '${seg.text}\n\n' : seg.text,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
       child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: AppTheme.cardBg(context),
@@ -208,195 +379,192 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
           ),
           boxShadow: AppTheme.cardShadow(context),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: segments.map((seg) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Padding(
-                padding: const EdgeInsets.all(4.0),
-                child: RichText(
-                  text: TextSpan(
-                    style: const TextStyle(
-                      fontSize: 15,
-                      height: 1.6,
-                      color: AppTheme.textPrimary,
-                      letterSpacing: 0.2,
-                    ),
-                    children: [
-                      if (seg.timeString != null)
-                        TextSpan(
-                          text: '[${seg.timeString}] ',
-                          style: const TextStyle(
-                            color: AppTheme.primaryColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      TextSpan(
-                        text: '${seg.speaker}: ',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: seg.speakerColor,
-                        ),
-                      ),
-                      TextSpan(text: seg.text),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
+        child: SelectableText.rich(
+          TextSpan(
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.6,
+              color: AppTheme.textPrimary,
+              letterSpacing: 0.2,
+            ),
+            children: spans,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildTranscriptChat(String transcript, String? meetingId) {
+  Widget _buildChatBubble(_TranscriptSegment item, int index) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: item.isNewSpeaker ? 4.0 : 16.0,
+        top: item.isNewSpeaker && index != 0 ? 24.0 : 0.0,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 48,
+            child: item.isNewSpeaker
+                ? Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: item.speakerColor.withValues(alpha: 0.12),
+                      shape: BoxShape.rectangle,
+                      borderRadius: const BorderRadius.all(
+                        Radius.circular(999),
+                      ),
+                      border: Border.all(
+                        color: item.speakerColor.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        item.speaker.isNotEmpty
+                            ? item.speaker[0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                          color: item.speakerColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 8),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (item.isNewSpeaker)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6.0, top: 6.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          item.speaker,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: item.speakerColor,
+                            fontSize: 14,
+                          ),
+                        ),
+                        if (item.timeString != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  size: 11,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  item.timeString!,
+                                  style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                // Speech Bubble
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Text(
+                    item.text,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTranscriptionTab(String transcript, String? meetingId) {
     final clean = transcript.trim();
     final bool isNoSpeech = clean == 'No speech detected.';
     final bool isStillLoading = clean == 'Loading transcript...' || (_isLoading && clean.isEmpty);
-
-    if (clean.isEmpty ||
+    final bool isEmptyOrLoading = clean.isEmpty ||
         clean == 'NONE' ||
         clean == 'null' ||
         clean == 'No transcript available.' ||
         isNoSpeech ||
-        isStillLoading) {
-      return _buildEmptyTranscriptWidget(
-        isStillLoading: isStillLoading,
-        isNoSpeech: isNoSpeech,
+        isStillLoading;
+
+    if (isEmptyOrLoading) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: _buildTopToggle(),
+          ),
+          _buildEmptyTranscriptWidget(
+            isStillLoading: isStillLoading,
+            isNoSpeech: isNoSpeech,
+          ),
+        ],
       );
     }
 
-    final segments = _parseTranscriptSegments(transcript);
+    if (_isFullTextView) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: _buildTopToggle(),
+          ),
+          _buildFullTextView(transcript, meetingId),
+        ],
+      );
+    }
 
+    final segments = _getSegments(transcript);
     return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      itemCount: segments.length,
+      itemCount: segments.length + 1,
       itemBuilder: (context, index) {
-        final item = segments[index];
-
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: item.isNewSpeaker ? 4.0 : 16.0,
-            top: item.isNewSpeaker && index != 0 ? 24.0 : 0.0,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 48,
-                child: item.isNewSpeaker
-                    ? Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: item.speakerColor.withValues(alpha: 0.12),
-                          shape: BoxShape.rectangle,
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(999),
-                          ),
-                          border: Border.all(
-                            color: item.speakerColor.withValues(alpha: 0.2),
-                            width: 1,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            item.speaker.isNotEmpty
-                                ? item.speaker[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              color: item.speakerColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              const SizedBox(width: 8),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (item.isNewSpeaker)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6.0, top: 6.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              item.speaker,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: item.speakerColor,
-                                fontSize: 14,
-                              ),
-                            ),
-                            if (item.timeString != null) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time_rounded,
-                                      size: 11,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      item.timeString!,
-                                      style: const TextStyle(
-                                        color: AppTheme.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-
-                    // Speech Bubble
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      child: Text(
-                        item.text,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          height: 1.5,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(8.0, 12.0, 8.0, 16.0),
+            child: _buildTopToggle(),
+          );
+        }
+        return _buildChatBubble(segments[index - 1], index - 1);
       },
     );
   }
@@ -1023,94 +1191,8 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
         ),
         body: TabBarView(
           children: [
-            // Transcription Tab
-            ListView(
-              children: [
-                // Top Toggle
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardBg(context),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                      border: Border.all(
-                        color: AppTheme.cardBorder(context),
-                        width: 1.0,
-                      ),
-                      boxShadow: AppTheme.cardShadow(context),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _isFullTextView = false),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: !_isFullTextView
-                                        ? AppTheme.primaryColor
-                                        : Colors.transparent,
-                                    width: 3,
-                                  ),
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Live',
-                                  style: TextStyle(
-                                    color: !_isFullTextView
-                                        ? AppTheme.primaryColor
-                                        : AppTheme.textSecondary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _isFullTextView = true),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: _isFullTextView
-                                        ? AppTheme.primaryColor
-                                        : Colors.transparent,
-                                    width: 3,
-                                  ),
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Full Text',
-                                  style: TextStyle(
-                                    color: _isFullTextView
-                                        ? AppTheme.primaryColor
-                                        : AppTheme.textSecondary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Content View (Live Chat or Full Text)
-                _isFullTextView
-                    ? _buildFullTextView(transcript, meetingId?.toString())
-                    : _buildTranscriptChat(transcript, meetingId?.toString()),
-              ],
-            ),
+            // Transcription Tab (Virtualized Lazy Loading)
+            _buildTranscriptionTab(transcript, meetingId?.toString()),
 
             // Notes Tab
             _buildNotesTab(),
@@ -1377,7 +1459,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
       if (trimmed.isEmpty) continue;
       if (trimmed.length > 120 &&
           !trimmed.substring(0, trimmed.length > 30 ? 30 : trimmed.length).contains(':')) {
-        final sentences = trimmed.split(RegExp(r'(?<=\.)\s+'));
+        final sentences = trimmed.split(_sentenceSplitRegex);
         for (final s in sentences) {
           final sTrim = s.trim();
           if (sTrim.isNotEmpty) processedLines.add(sTrim);
@@ -1397,7 +1479,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
       String? segTimeString;
 
       // Extract [MM:SS] or [HH:MM:SS] timestamp if present
-      final timestampMatch = RegExp(r'\[(\d{1,2}):(\d{2})\]').firstMatch(line);
+      final timestampMatch = _timestampRegex.firstMatch(line);
       if (timestampMatch != null) {
         final minutes = int.tryParse(timestampMatch.group(1) ?? '0') ?? 0;
         final seconds = int.tryParse(timestampMatch.group(2) ?? '0') ?? 0;
@@ -1408,7 +1490,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
 
       // Clean line without the timestamp tag
       final cleanLine =
-          line.replaceAll(RegExp(r'\[\d{1,2}:\d{2}\]\s*'), '').trim();
+          line.replaceAll(_timestampStripRegex, '').trim();
 
       String text = cleanLine;
       bool isNewSpeaker = false;

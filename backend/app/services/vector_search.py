@@ -54,7 +54,7 @@ async def process_and_store_transcript(supabase_client, meeting_id: str, transcr
     if not transcript or len(transcript.strip()) < 10:
         return
 
-    model = get_embedding_model()
+    model = await run_in_threadpool(get_embedding_model)
     chunks = chunk_text(transcript)
     if not chunks:
         return
@@ -90,7 +90,7 @@ async def semantic_search(supabase_client, query: str, limit: int = 5):
         return []
 
     try:
-        model = get_embedding_model()
+        model = await run_in_threadpool(get_embedding_model)
         # Non-blocking query encoding with normalization
         query_embeddings = await run_in_threadpool(
             lambda: model.encode(

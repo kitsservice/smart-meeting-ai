@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.api import api_router
 from app.core.config import settings
@@ -26,6 +27,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
+
+# Enable GZip compression for large transcripts and payloads
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Enable CORS for Flutter mobile, desktop, and web communication
 app.add_middleware(

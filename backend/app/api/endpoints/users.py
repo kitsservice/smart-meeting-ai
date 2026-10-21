@@ -3,6 +3,7 @@ import logging
 
 import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from supabase import Client
 
 from app.db.supabase import get_supabase_client
@@ -36,12 +37,15 @@ async def enroll_voice(
     audio_bytes = await file.read()
 
     try:
-        # 1. Generate Voice Fingerprint
-        embedding = None
-        try:
-            embedding = voice_biometrics.extract_embedding_from_bytes(audio_bytes)
-        except Exception as emb_err:
-            logger.warning(f"Voice biometrics model extraction warning: {emb_err}")
+        # 1. Generate Voice Fingerprint in worker threadpool to keep event loop responsive
+        def extract_voice_embedding():
+            try:
+                return voice_biometrics.extract_embedding_from_bytes(audio_bytes)
+            except Exception as emb_err:
+                logger.warning(f"Voice biometrics model extraction warning: {emb_err}")
+                return None
+
+        embedding = await run_in_threadpool(extract_voice_embedding)
 
         if not embedding:
             if len(audio_bytes) < 1000:
@@ -59,7 +63,7 @@ async def enroll_voice(
             rng = np.random.default_rng(seed)
             embedding = (rng.standard_normal(192).astype(np.float32) * 5.0).tolist()
 
-        # 2. Save it to Supabase
+        # 2. Save it to Supabase via threadpool
         upsert_data: dict[str, object] = {
             "id": user_id,
             "voice_embedding": embedding,
@@ -68,8 +72,11 @@ async def enroll_voice(
         if full_name:
             upsert_data["full_name"] = full_name
 
-        db.table("users").upsert(upsert_data).execute()
-        invalidate_enrolled_users_cache()
+        def save_voice_profile():
+            db.table("users").upsert(upsert_data).execute()
+            invalidate_enrolled_users_cache()
+
+        await run_in_threadpool(save_voice_profile)
 
         return {"status": "success", "message": "Voice fingerprint saved successfully!"}
     except HTTPException:
@@ -77,18 +84,21 @@ async def enroll_voice(
     except Exception as e:
         logger.error(f"Error enrolling voice for user {user_id}: {e}")
         try:
-            db.table("users").upsert({
-                "id": user_id,
-                "voice_profile_url": "enrolled_in_ai",
-            }).execute()
+            def save_fallback():
+                db.table("users").upsert({
+                    "id": user_id,
+                    "voice_profile_url": "enrolled_in_ai",
+                }).execute()
+
+            await run_in_threadpool(save_fallback)
             return {"status": "success", "message": "Voice profile saved successfully!"}
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to process voice sample.") from e
 
 
 @router.delete("/{user_id}")
-async def delete_user_account(user_id: str, db: Client = Depends(get_db)):
-    """Delete a user account and all their data"""
+def delete_user_account(user_id: str, db: Client = Depends(get_db)):
+    """Delete a user account and all their data (executed in threadpool)"""
     try:
         # Delete from public table
         db.table("users").delete().eq("id", user_id).execute()
