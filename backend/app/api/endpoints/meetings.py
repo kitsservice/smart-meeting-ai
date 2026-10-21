@@ -308,7 +308,11 @@ async def _process_and_save_audio(meeting_id: str, file_path: str, filename: str
             audio_bytes = await run_in_threadpool(read_file)
 
             # 1. Transcribe with Deepgram (Includes Diarization, Timestamps, and Indic support)
-            segments = await deepgram_service.transcribe_audio_with_segments(audio_bytes)
+            try:
+                segments = await deepgram_service.transcribe_audio_with_segments(audio_bytes)
+            except Exception as dg_err:
+                logger.warning(f"Deepgram transcription error: {dg_err}")
+                segments = []
 
             # Fallback to Sarvam AI if Deepgram returned no segments (e.g. Indic speech / song)
             if not segments and settings.SARVAM_API_KEY:
@@ -400,6 +404,26 @@ async def _process_and_save_audio(meeting_id: str, file_path: str, filename: str
                     transcript_lines.append(f"[{time_str}] {speaker_name}: {seg['text']}")
 
                 transcript = "\n\n".join(transcript_lines)
+
+            # Early progressive update: persist transcript immediately to Supabase
+            # so the user sees their full transcript on phone in 3 to 5 seconds!
+            def update_early_transcript():
+                return (
+                    db.table("meetings")
+                    .update(
+                        {
+                            "transcript": transcript,
+                            "summary": "AI is analyzing meeting summary and action items...",
+                        }
+                    )
+                    .eq("id", meeting_id)
+                    .execute()
+                )
+
+            try:
+                await run_in_threadpool(update_early_transcript)
+            except Exception as early_err:
+                logger.warning(f"Early transcript update skipped: {early_err}")
 
             # 6. Generate Summary & Action Items
             analysis = await deepgram_service.generate_summary(transcript)

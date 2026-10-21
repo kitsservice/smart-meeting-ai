@@ -65,9 +65,20 @@ class DeepgramAIService:
         if not settings.DEEPGRAM_API_KEY:
             raise ValueError("Deepgram API key is not configured.")
 
+        # Dynamically detect audio format from magic bytes for fastest Deepgram decoding
+        content_type = "application/octet-stream"
+        if audio_bytes.startswith(b"RIFF") and b"WAVE" in audio_bytes[:16]:
+            content_type = "audio/wav"
+        elif audio_bytes.startswith(b"\xff\xf1") or audio_bytes.startswith(b"\xff\xf9"):
+            content_type = "audio/aac"
+        elif len(audio_bytes) > 8 and (b"ftyp" in audio_bytes[:16] or b"moov" in audio_bytes[:32]):
+            content_type = "audio/m4a"
+        elif audio_bytes.startswith(b"ID3") or audio_bytes.startswith(b"\xff\xfb"):
+            content_type = "audio/mp3"
+
         headers = {
             "Authorization": f"Token {settings.DEEPGRAM_API_KEY}",
-            "Content-Type": "audio/wav",
+            "Content-Type": content_type,
         }
 
         params = {
@@ -175,7 +186,7 @@ Return the result EXACTLY in this JSON format without markdown wrapping:
 """
         last_error = None
         # Candidate active models in Google Gemini API
-        for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
             try:
 
                 def call_gemini(target_model=model_name):
