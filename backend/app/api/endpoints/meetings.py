@@ -343,6 +343,38 @@ async def _process_and_save_audio(meeting_id: str, file_path: str, filename: str
                 except Exception as fallback_err:
                     logger.warning(f"Sarvam AI fallback error: {fallback_err}")
 
+            # Fallback to Gemini 2.0 Flash Multimodal if Deepgram and Sarvam returned no segments
+            if not segments and settings.GEMINI_API_KEY:
+                try:
+                    logger.info("Deepgram & Sarvam returned no segments. Attempting Gemini AI fallback...")
+                    mime = "audio/m4a"
+                    if filename.endswith(".wav") or (audio_bytes.startswith(b"RIFF") and b"WAVE" in audio_bytes[:16]):
+                        mime = "audio/wav"
+                    elif filename.endswith(".mp3") or audio_bytes.startswith(b"ID3") or audio_bytes.startswith(b"\xff\xfb"):
+                        mime = "audio/mp3"
+                    elif filename.endswith(".aac") or audio_bytes.startswith(b"\xff\xf1"):
+                        mime = "audio/aac"
+
+                    gemini_text = await deepgram_service.transcribe_with_gemini(audio_bytes, mime_type=mime)
+                    if gemini_text and gemini_text.strip():
+                        audio_dur = 10.0
+                        try:
+                            info = sf.info(io.BytesIO(audio_bytes))
+                            audio_dur = info.duration
+                        except Exception:
+                            pass
+                        segments = [
+                            {
+                                "speaker_id": 0,
+                                "start": 0.0,
+                                "end": audio_dur,
+                                "text": gemini_text.strip(),
+                            }
+                        ]
+                        logger.info(f"Gemini transcription fallback succeeded: {gemini_text[:60]}")
+                except Exception as gemini_err:
+                    logger.warning(f"Gemini transcription fallback error: {gemini_err}")
+
             if not segments:
                 transcript = "No speech detected."
             else:

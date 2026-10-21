@@ -104,6 +104,22 @@ class DeepgramAIService:
         words = alternatives[0].get("words", [])
 
         if not words:
+            # Fallback: Deepgram returned a transcript text but word-level diarization was not generated
+            raw_transcript = alternatives[0].get("transcript", "").strip()
+            if raw_transcript:
+                dur = 0.0
+                try:
+                    dur = float(response_data.get("metadata", {}).get("duration", 0.0))
+                except Exception:
+                    pass
+                return [
+                    {
+                        "speaker_id": 0,
+                        "start": 0.0,
+                        "end": dur,
+                        "text": raw_transcript,
+                    }
+                ]
             return []
 
         segments = []
@@ -113,18 +129,26 @@ class DeepgramAIService:
 
         for word_obj in words:
             speaker_id = word_obj.get("speaker", 0)
-            word_text = word_obj.get("punctuated_word", "")
+            word_text = (
+                word_obj.get("punctuated_word")
+                or word_obj.get("word")
+                or ""
+            ).strip()
+
+            if not word_text:
+                continue
 
             if speaker_id != current_speaker:
                 # Save previous segment
-                segments.append(
-                    {
-                        "speaker_id": current_speaker,
-                        "start": current_start,
-                        "end": word_obj.get("start", current_start + 0.1),
-                        "text": " ".join(current_sentence),
-                    }
-                )
+                if current_sentence:
+                    segments.append(
+                        {
+                            "speaker_id": current_speaker,
+                            "start": current_start,
+                            "end": word_obj.get("start", current_start + 0.1),
+                            "text": " ".join(current_sentence),
+                        }
+                    )
                 # Start new segment
                 current_speaker = speaker_id
                 current_start = word_obj.get("start", 0.0)
@@ -156,6 +180,45 @@ class DeepgramAIService:
         except Exception as e:
             logger.error(f"Deepgram Error: {e}")
             return f"Error during transcription: {e}"
+
+    async def transcribe_with_gemini(
+        self, audio_bytes: bytes, mime_type: str = "audio/m4a"
+    ) -> str:
+        """High-accuracy multimodal speech transcription fallback via Gemini 2.0 Flash.
+
+        Supports Indian accents, Hindi, Marathi, code-mixed Hinglish, and noisy audio.
+        """
+        client = self._get_gemini_client()
+        if client is None:
+            return ""
+
+        from google.genai import types
+
+        prompt = (
+            "Provide a complete, verbatim, accurate transcription of all spoken words in this audio recording. "
+            "If multiple languages are spoken (such as Hindi, English, Hinglish, Marathi), transcribe what was said accurately. "
+            "Return ONLY the verbatim transcript of the spoken words with no preamble, no markdown formatting, and no commentary."
+        )
+
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+            try:
+                def call_gemini(target_model=model_name):
+                    return client.models.generate_content(
+                        model=target_model,
+                        contents=[
+                            types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                            prompt,
+                        ],
+                    )
+
+                response = await run_in_threadpool(call_gemini)
+                text = (response.text or "").strip()
+                if text and "no speech" not in text.lower() and len(text) > 2:
+                    logger.info(f"Gemini ({model_name}) audio transcription succeeded: {text[:60]}")
+                    return text
+            except Exception as e:
+                logger.warning(f"Gemini audio transcription ({model_name}) error: {e}")
+        return ""
 
     async def _generate_summary_gemini(self, transcript: str) -> dict:
         client = self._get_gemini_client()
