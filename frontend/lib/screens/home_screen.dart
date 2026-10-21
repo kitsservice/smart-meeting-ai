@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/meetings_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../services/room_service.dart';
+import '../services/recording_service.dart';
 import '../widgets/note_dialog_sheet.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -2441,19 +2442,148 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
+  Widget _buildActiveRecordingBar() {
+    return AnimatedBuilder(
+      animation: MeetingRecordingService(),
+      builder: (context, _) {
+        final service = MeetingRecordingService();
+        if (!service.isRecording && !service.hasSession) {
+          return const SizedBox.shrink();
+        }
+
+        final duration = service.recordDuration;
+        final minutes = (duration / 60).floor().toString().padLeft(2, '0');
+        final seconds = (duration % 60).toString().padLeft(2, '0');
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.pushNamed(context, '/active_meeting', arguments: {
+              'title': service.meetingTitle,
+              'room_code': service.roomCode,
+              'is_participant': service.isParticipant,
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: service.isRecording
+                    ? Colors.redAccent.withValues(alpha: 0.6)
+                    : Colors.amber.withValues(alpha: 0.6),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (service.isRecording ? Colors.redAccent : Colors.amber)
+                      .withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: service.isRecording ? Colors.redAccent : Colors.amber,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        service.meetingTitle,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        service.isRecording
+                            ? 'Recording in background • $minutes:$seconds'
+                            : 'Meeting paused • $minutes:$seconds',
+                        style: TextStyle(
+                          color: service.isRecording
+                              ? Colors.redAccent.shade100
+                              : Colors.amber.shade100,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Open',
+                        style: TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: AppTheme.primaryColor,
+                        size: 10,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _activatedTabs.add(_currentIndex);
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Column(
         children: [
-          _buildTab(0),
-          _buildTab(1),
-          _buildTab(2),
-          _buildTab(3),
-          _buildTab(4),
+          Expanded(
+            child: IndexedStack(
+              index: _currentIndex,
+              children: [
+                _buildTab(0),
+                _buildTab(1),
+                _buildTab(2),
+                _buildTab(3),
+                _buildTab(4),
+              ],
+            ),
+          ),
+          _buildActiveRecordingBar(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
