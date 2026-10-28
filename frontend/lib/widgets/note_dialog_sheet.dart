@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class NoteDialogSheet extends StatefulWidget {
   final String initialText;
@@ -60,12 +61,16 @@ class _NoteDialogSheetState extends State<NoteDialogSheet> {
         top: false,
         child: SingleChildScrollView(
           physics: const ClampingScrollPhysics(),
-          child: Container(
-            decoration: const BoxDecoration(
-              color: AppTheme.backgroundColor,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          child: ResponsiveSheetContainer(
+            maxWidth: Responsive.maxSheetWidth,
+            backgroundColor: AppTheme.backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            padding: EdgeInsets.fromLTRB(
+              Responsive.value(context, mobile: 24.0, narrow: 14.0),
+              16,
+              Responsive.value(context, mobile: 24.0, narrow: 14.0),
+              24,
             ),
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,

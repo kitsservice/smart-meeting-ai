@@ -15,6 +15,7 @@ import '../services/recording_service.dart';
 import '../widgets/note_dialog_sheet.dart';
 import '../services/rating_prompt_service.dart';
 import '../widgets/home_meeting_sheets.dart';
+import '../utils/responsive.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -232,8 +233,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics(),
           ),
-          child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+          child: ResponsiveContentWrapper(
+            maxWidth: Responsive.maxContentWidth,
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.horizontalPadding(context),
+              vertical: 16.0,
+            ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children:
@@ -564,7 +569,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       const SizedBox(height: 24),
 
-                      // 4. Quick Actions: Create Room, Join, Schedule
+                      // 4. Quick Actions: Create Room, Join, Schedule (Adaptive)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -576,21 +581,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    height: 64,
+                                    height: Responsive.value(context, mobile: 64.0, narrow: 54.0),
                                     width: double.infinity,
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFFF7A00).withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(color: const Color(0xFFFF7A00).withValues(alpha: 0.3)),
                                     ),
-                                    child: const Icon(Icons.add_box_rounded, color: Color(0xFFFF7A00), size: 28),
+                                    child: Icon(Icons.add_box_rounded, color: const Color(0xFFFF7A00), size: Responsive.value(context, mobile: 28.0, narrow: 22.0)),
                                   ),
                                   const SizedBox(height: 8),
-                                  const SizedBox(
+                                  SizedBox(
                                     height: 34,
                                     child: Text(
                                       'Create Room', 
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary, height: 1.2),
+                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: Responsive.value(context, mobile: 13.0, narrow: 11.0), color: AppTheme.textPrimary, height: 1.2),
                                       textAlign: TextAlign.center,
                                       maxLines: 2,
                                     ),
@@ -599,7 +604,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          SizedBox(width: Responsive.value(context, mobile: 16.0, narrow: 8.0)),
                           // Have Code ?
                           Expanded(
                             child: GestureDetector(
@@ -608,21 +613,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    height: 64,
+                                    height: Responsive.value(context, mobile: 64.0, narrow: 54.0),
                                     width: double.infinity,
                                     decoration: BoxDecoration(
                                       color: AppTheme.primaryColor.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
                                     ),
-                                    child: const Icon(Icons.group_add_rounded, color: AppTheme.primaryColor, size: 28),
+                                    child: Icon(Icons.group_add_rounded, color: AppTheme.primaryColor, size: Responsive.value(context, mobile: 28.0, narrow: 22.0)),
                                   ),
                                   const SizedBox(height: 8),
-                                  const SizedBox(
+                                  SizedBox(
                                     height: 34,
                                     child: Text(
                                       'Have Code ?', 
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary, height: 1.2),
+                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: Responsive.value(context, mobile: 13.0, narrow: 11.0), color: AppTheme.textPrimary, height: 1.2),
                                       textAlign: TextAlign.center,
                                       maxLines: 2,
                                     ),
@@ -631,7 +636,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          SizedBox(width: Responsive.value(context, mobile: 16.0, narrow: 8.0)),
                           // Schedule
                           Expanded(
                             child: GestureDetector(
@@ -640,21 +645,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    height: 64,
+                                    height: Responsive.value(context, mobile: 64.0, narrow: 54.0),
                                     width: double.infinity,
                                     decoration: BoxDecoration(
                                       color: AppTheme.accentColor.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.3)),
                                     ),
-                                    child: const Icon(Icons.calendar_month_rounded, color: AppTheme.accentColor, size: 28),
+                                    child: Icon(Icons.calendar_month_rounded, color: AppTheme.accentColor, size: Responsive.value(context, mobile: 28.0, narrow: 22.0)),
                                   ),
                                   const SizedBox(height: 8),
-                                  const SizedBox(
+                                  SizedBox(
                                     height: 34,
                                     child: Text(
                                       'Schedule', 
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary, height: 1.2),
+                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: Responsive.value(context, mobile: 13.0, narrow: 11.0), color: AppTheme.textPrimary, height: 1.2),
                                       textAlign: TextAlign.center,
                                       maxLines: 2,
                                     ),
@@ -667,14 +672,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       const SizedBox(height: 32),
 
-                      // 4. Premium Grid Layout
+                      // 4. Premium Grid Layout (Adaptive across Narrow Fold, Phone & Tablet)
                       GridView.count(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 2,
+                        crossAxisCount: Responsive.gridColumns(
+                          context,
+                          narrow: 2,
+                          mobile: 2,
+                          foldable: 4,
+                          desktop: 4,
+                        ),
                         mainAxisSpacing: 16,
-                        crossAxisSpacing: 16,
-                        childAspectRatio: 0.82,
+                        crossAxisSpacing: Responsive.value(
+                          context,
+                          mobile: 16.0,
+                          narrow: 10.0,
+                        ),
+                        childAspectRatio: Responsive.gridChildAspectRatio(
+                          context,
+                          narrow: 0.74,
+                          mobile: 0.82,
+                          foldable: 1.05,
+                          desktop: 1.15,
+                        ),
                         children: [
                           buildGridCard(
                             title: 'My Meetings',
@@ -938,8 +959,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ],
         ),
       ),
-      body: _manualNotes.isEmpty
-          ? Center(
+      body: ResponsiveContentWrapper(
+        maxWidth: Responsive.maxContentWidth,
+        child: _manualNotes.isEmpty
+            ? Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
@@ -1193,7 +1216,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           ),
                         )
                       : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                          padding: EdgeInsets.fromLTRB(
+                            Responsive.horizontalPadding(context),
+                            4,
+                            Responsive.horizontalPadding(context),
+                            24,
+                          ),
                           itemCount: filteredNotesWithIndex.length,
                           separatorBuilder: (context, index) =>
                               const SizedBox(height: 12),
@@ -1438,6 +1466,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ],
             ),
+      ),
     );
   }
 
@@ -1448,7 +1477,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: Column(
+      body: ResponsiveContentWrapper(
+        maxWidth: Responsive.maxContentWidth,
+        child: Column(
         children: [
           Container(
             width: double.infinity,
@@ -1504,7 +1535,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           const SizedBox(height: 24),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: EdgeInsets.symmetric(
+                horizontal: Responsive.horizontalPadding(context),
+              ),
               children: [
                 buildProfileMenuItem(
                   Icons.person_outline,
@@ -1606,6 +1639,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -1698,16 +1732,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         final minutes = (duration / 60).floor().toString().padLeft(2, '0');
         final seconds = (duration % 60).toString().padLeft(2, '0');
 
-        return GestureDetector(
-          onTap: () {
-            Navigator.pushNamed(context, '/active_meeting', arguments: {
-              'title': service.meetingTitle,
-              'room_code': service.roomCode,
-              'is_participant': service.isParticipant,
-            });
-          },
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+        return ResponsiveContentWrapper(
+          maxWidth: Responsive.maxContentWidth,
+          child: GestureDetector(
+            onTap: () {
+              Navigator.pushNamed(context, '/active_meeting', arguments: {
+                'title': service.meetingTitle,
+                'room_code': service.roomCode,
+                'is_participant': service.isParticipant,
+              });
+            },
+            child: Container(
+              margin: EdgeInsets.fromLTRB(
+                Responsive.value(context, mobile: 16.0, narrow: 10.0),
+                4,
+                Responsive.value(context, mobile: 16.0, narrow: 10.0),
+                10,
+              ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
@@ -1802,6 +1843,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ],
             ),
           ),
+          ),
         );
       },
     );
@@ -1860,6 +1902,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         currentIndex: _currentIndex,
         onTap: _switchTab,
         type: BottomNavigationBarType.fixed,
+        selectedFontSize: Responsive.value(context, mobile: 14.0, narrow: 11.0),
+        unselectedFontSize: Responsive.value(context, mobile: 12.0, narrow: 10.0),
         selectedItemColor: AppTheme.primaryColor,
         unselectedItemColor: AppTheme.textSecondary,
         items: const [
@@ -1950,9 +1994,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
             ),
-            // Card Content
+            // Card Content (Responsive padding, icons & typography)
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(Responsive.value(context, mobile: 16.0, narrow: 10.0)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1962,11 +2006,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Container(
-                        width: 44,
-                        height: 44,
+                        width: Responsive.value(context, mobile: 44.0, narrow: 36.0),
+                        height: Responsive.value(context, mobile: 44.0, narrow: 36.0),
                         decoration: BoxDecoration(
                           gradient: iconGradient,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(Responsive.value(context, mobile: 14.0, narrow: 11.0)),
                         ),
                         child: Center(child: iconWidget),
                       ),
@@ -1975,7 +2019,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         color: isDarkMode
                             ? Colors.white38
                             : const Color(0xFF94A3B8),
-                        size: 15,
+                        size: Responsive.value(context, mobile: 15.0, narrow: 12.0),
                       ),
                     ],
                   ),
@@ -1983,8 +2027,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   // Title
                   Text(
                     title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: Responsive.value(context, mobile: 16.0, narrow: 13.5),
                       fontWeight: FontWeight.w700,
                       color: isDarkMode
                           ? Colors.white
@@ -1997,7 +2043,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 11.5,
+                      fontSize: Responsive.value(context, mobile: 11.5, narrow: 10.0),
                       fontWeight: FontWeight.w400,
                       color: isDarkMode
                           ? Colors.white60
@@ -2007,12 +2053,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: Responsive.value(context, mobile: 10.0, narrow: 6.0)),
                   // Bottom Badge / Pill
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4.5,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: Responsive.value(context, mobile: 10.0, narrow: 8.0),
+                      vertical: Responsive.value(context, mobile: 4.5, narrow: 3.5),
                     ),
                     decoration: BoxDecoration(
                       color: isDarkMode
@@ -2022,8 +2068,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                     child: Text(
                       chipText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: Responsive.value(context, mobile: 11.0, narrow: 9.5),
                         fontWeight: FontWeight.w600,
                         color: isDarkMode
                             ? chipTextColor.withValues(alpha: 0.95)

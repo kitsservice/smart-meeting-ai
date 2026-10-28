@@ -11,6 +11,7 @@ torchaudio
 speechbrain
 scipy
 soundfile
+av
 google-genai
 python-multipart
 sentence-transformers

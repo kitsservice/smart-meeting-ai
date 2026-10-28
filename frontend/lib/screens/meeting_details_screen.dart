@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../services/calendar_service.dart';
@@ -1286,8 +1287,10 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
+        body: ResponsiveContentWrapper(
+          maxWidth: Responsive.maxContentWidth,
+          child: TabBarView(
+            children: [
             // Transcription Tab (Virtualized Lazy Loading)
             _buildTranscriptionTab(transcript, meetingId?.toString()),
 
@@ -1296,7 +1299,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
 
             // AI Summary Tab
             SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
+              padding: EdgeInsets.all(Responsive.horizontalPadding(context)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1542,6 +1545,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

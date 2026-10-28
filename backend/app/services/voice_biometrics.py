@@ -1,12 +1,11 @@
 import io
 import logging
 import time
+from typing import Any
 
 import numpy as np
 import soundfile as sf
 import torch
-import torchaudio
-from speechbrain.inference.speaker import EncoderClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -45,16 +44,32 @@ def invalidate_enrolled_users_cache():
     _ENROLLED_USERS_CACHE = None
 
 
+def format_speaker_display_name(raw_name: str | None, email: str | None = None) -> str:
+    """Formats user full name or email cleanly in Title Case for meeting transcripts."""
+    if raw_name and raw_name.strip():
+        parts = [p.capitalize() for p in raw_name.strip().split() if p]
+        if parts:
+            return " ".join(parts)
+    if email and email.strip():
+        username = email.strip().split("@")[0].replace(".", " ").replace("_", " ").replace("-", " ")
+        parts = [p.capitalize() for p in username.split() if p]
+        if parts:
+            return " ".join(parts)
+    return "Speaker"
+
+
 class VoiceBiometricsService:
     def __init__(self):
         self._classifier = None
-        self._resamplers: dict[int, torchaudio.transforms.Resample] = {}
+        self._resamplers: dict[int, Any] = {}
 
     @property
     def classifier(self):
         if self._classifier is None:
             logger.info("Loading SpeechBrain Voice Biometrics Model...")
             try:
+                from speechbrain.inference.speaker import EncoderClassifier
+
                 # Load the ECAPA-TDNN model lazily
                 self._classifier = EncoderClassifier.from_hparams(
                     source="speechbrain/spkrec-ecapa-voxceleb",
@@ -66,8 +81,10 @@ class VoiceBiometricsService:
                 return None
         return self._classifier
 
-    def _get_resampler(self, sample_rate: int) -> torchaudio.transforms.Resample:
+    def _get_resampler(self, sample_rate: int) -> Any:
         if sample_rate not in self._resamplers:
+            import torchaudio
+
             self._resamplers[sample_rate] = torchaudio.transforms.Resample(
                 orig_freq=sample_rate, new_freq=16000
             )
@@ -85,7 +102,30 @@ class VoiceBiometricsService:
         if isinstance(audio_input, tuple):
             data, sample_rate = audio_input
         else:
-            data, sample_rate = sf.read(io.BytesIO(audio_input), dtype="float32")
+            try:
+                data, sample_rate = sf.read(io.BytesIO(audio_input), dtype="float32")
+            except Exception as sf_err:
+                logger.info("soundfile failed to decode, attempting PyAV fallback: %s", sf_err)
+                try:
+                    import av
+                    container = av.open(io.BytesIO(audio_input))
+                    if not container.streams.audio:
+                        raise ValueError("No audio streams found in input file.")
+                    stream = container.streams.audio[0]
+                    resampler = av.AudioResampler(format="flt", layout="mono", rate=16000)
+                    frames = []
+                    for frame in container.decode(stream):
+                        for rf in resampler.resample(frame):
+                            frames.append(rf.to_ndarray())
+                    container.close()
+                    if not frames:
+                        raise ValueError("No audio frames decoded by PyAV")
+                    audio_data = np.concatenate(frames, axis=1)
+                    data = audio_data.T
+                    sample_rate = 16000
+                except Exception as av_err:
+                    logger.error("Both soundfile and PyAV failed to decode audio: %s", av_err)
+                    raise
 
         if len(data.shape) == 1:
             data = data.reshape(-1, 1)
@@ -197,11 +237,12 @@ class VoiceBiometricsService:
         enrolled_users: list[dict],
         threshold: float = 0.20,
     ) -> dict[int, str]:
-        """VECTORIZED BATCH SPEAKER IDENTIFICATION:
+        """VECTORIZED 1-TO-1 SPEAKER IDENTIFICATION:
 
-        Pre-stacks all enrolled user embeddings into a normalized 2D matrix (N, D)
-        and computes matrix-vector cosine similarities via SIMD BLAS in a single pass.
-        Returns a mapping of speaker_id -> identified name or fallback 'Speaker N'.
+        Pre-stacks enrolled user embeddings into a normalized 2D matrix (N, D),
+        computes cosine similarities for all speakers, and matches uniquely
+        in descending order of similarity to prevent duplicate user labels.
+        Displays proper full names in title case (e.g., 'Rahul Sharma').
         """
         speaker_name_map: dict[int, str] = {}
         for spk_id in speaker_embeddings:
@@ -225,42 +266,67 @@ class VoiceBiometricsService:
         try:
             # Shape (N, 192)
             user_matrix = np.asarray(user_vectors, dtype=np.float32)
-            norms = np.linalg.norm(user_matrix, axis=1, keepdims=True)
-            # Safe division avoiding zeros
-            norms = np.where(norms < 1e-9, 1.0, norms)
-            normalized_user_matrix = user_matrix / norms
+            user_norms = np.linalg.norm(user_matrix, axis=1, keepdims=True)
+            user_norms = np.where(user_norms < 1e-9, 1.0, user_norms)
+            normalized_user_matrix = user_matrix / user_norms
 
+            # Filter and stack speaker embeddings into matrix (M, 192)
+            valid_spk_ids: list[int] = []
+            spk_vectors: list[np.ndarray] = []
             for spk_id, target_emb in speaker_embeddings.items():
                 if target_emb is None:
                     continue
-
                 v = (
                     target_emb
                     if isinstance(target_emb, np.ndarray)
                     else np.asarray(target_emb, dtype=np.float32)
                 )
-                if v.size != 192:
+                if v.size == 192:
+                    valid_spk_ids.append(spk_id)
+                    spk_vectors.append(v.reshape(192))
+
+            if not valid_spk_ids:
+                return speaker_name_map
+
+            spk_matrix = np.asarray(spk_vectors, dtype=np.float32)
+            spk_norms = np.linalg.norm(spk_matrix, axis=1, keepdims=True)
+            spk_norms = np.where(spk_norms < 1e-9, 1.0, spk_norms)
+            normalized_spk_matrix = spk_matrix / spk_norms
+
+            # Compute full similarity matrix (M, N) via a single BLAS matrix multiplication
+            sim_matrix = np.dot(normalized_spk_matrix, normalized_user_matrix.T)
+
+            # Collect candidate matches above threshold
+            candidate_matches: list[tuple[float, int, int]] = []
+            for s_idx, spk_id in enumerate(valid_spk_ids):
+                for u_idx, score in enumerate(sim_matrix[s_idx]):
+                    if score >= threshold:
+                        candidate_matches.append((float(score), spk_id, u_idx))
+
+            # Sort descending by match confidence score for optimal greedy 1-to-1 matching
+            candidate_matches.sort(key=lambda x: x[0], reverse=True)
+
+            assigned_speakers: set[int] = set()
+            assigned_users: set[int] = set()
+
+            for score, spk_id, u_idx in candidate_matches:
+                if spk_id in assigned_speakers or u_idx in assigned_users:
                     continue
 
-                v_norm = float(np.linalg.norm(v))
-                if v_norm < 1e-9:
-                    continue
+                matched_user = valid_users[u_idx]
+                display_name = format_speaker_display_name(
+                    matched_user.get("full_name"), matched_user.get("email")
+                )
+                speaker_name_map[spk_id] = display_name
+                assigned_speakers.add(spk_id)
+                assigned_users.add(u_idx)
+                logger.info(
+                    "Calibrated voice recognized: Speaker %d -> '%s' (similarity: %.3f)",
+                    spk_id,
+                    display_name,
+                    score,
+                )
 
-                normalized_v = v / v_norm
-                # Vectorized matrix-vector multiplication (N,)
-                scores = np.dot(normalized_user_matrix, normalized_v)
-                best_idx = int(np.argmax(scores))
-                best_score = float(scores[best_idx])
-
-                if best_score > threshold:
-                    matched_user = valid_users[best_idx]
-                    full_name = matched_user.get("full_name")
-                    if full_name and full_name.strip():
-                        speaker_name_map[spk_id] = full_name.strip().split()[0].capitalize()
-                    else:
-                        email = matched_user.get("email")
-                        if email and email.strip():
-                            speaker_name_map[spk_id] = email.strip().split("@")[0].capitalize()
         except Exception as e:
             logger.warning(f"Vectorized speaker matching error: {e}")
 

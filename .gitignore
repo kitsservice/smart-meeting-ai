@@ -18,6 +18,7 @@ backend/.ruff_cache/
 backend/temp_audio/
 backend/saved_audio/
 backend/pretrained_models/
+pretrained_models/
 backend/.env
 backend/*.wav
 backend/*.mp3

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../services/room_service.dart';
+import '../utils/responsive.dart';
 
 class HomeMeetingSheets {
   static Future<void> showNewMeetingSetup(
@@ -30,16 +31,13 @@ class HomeMeetingSheets {
                 top: false,
                 child: SingleChildScrollView(
                   physics: const ClampingScrollPhysics(),
-                  child: Container(
-                    padding: const EdgeInsets.only(
-                      left: 24,
-                      right: 24,
+                  child: ResponsiveSheetContainer(
+                    maxWidth: Responsive.maxSheetWidth,
+                    backgroundColor: AppTheme.backgroundColor,
+                    padding: EdgeInsets.only(
+                      left: Responsive.value(modalContext, mobile: 24.0, narrow: 14.0),
+                      right: Responsive.value(modalContext, mobile: 24.0, narrow: 14.0),
                       top: 32,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: AppTheme.backgroundColor,
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(32)),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -213,16 +211,13 @@ class HomeMeetingSheets {
                 top: false,
                 child: SingleChildScrollView(
                   physics: const ClampingScrollPhysics(),
-                  child: Container(
-                    padding: const EdgeInsets.only(
-                      left: 24,
-                      right: 24,
+                  child: ResponsiveSheetContainer(
+                    maxWidth: Responsive.maxSheetWidth,
+                    backgroundColor: AppTheme.backgroundColor,
+                    padding: EdgeInsets.only(
+                      left: Responsive.value(modalContext, mobile: 24.0, narrow: 14.0),
+                      right: Responsive.value(modalContext, mobile: 24.0, narrow: 14.0),
                       top: 32,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: AppTheme.backgroundColor,
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(32)),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -420,23 +415,14 @@ class HomeMeetingSheets {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Container(
+        return ResponsiveSheetContainer(
+          maxWidth: Responsive.maxSheetWidth,
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(ctx).padding.bottom + 24,
-            left: 24,
-            right: 24,
+            left: Responsive.value(ctx, mobile: 24.0, narrow: 14.0),
+            right: Responsive.value(ctx, mobile: 24.0, narrow: 14.0),
             top: 20,
-          ),
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.darkSurface : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
-                blurRadius: 30,
-                offset: const Offset(0, -6),
-              ),
-            ],
           ),
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),

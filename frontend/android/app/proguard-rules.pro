@@ -26,3 +26,6 @@
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -dontwarn kotlinx.coroutines.**
+
+# Google Play Core
+-dontwarn com.google.android.play.core.**

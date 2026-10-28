@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class ChatMessage {
   final String text;
@@ -160,7 +161,7 @@ class _AskAresScreenState extends State<AskAresScreen> {
   bool _hasInputText = false;
 
   final List<String> _quickPrompts = [
-    "Give me today's daily report and short summary",
+    "What did we discuss in today's meetings?",
     'What were the key decisions made recently?',
     'List all pending action items and who owns them',
     'Summarize my latest meeting',
@@ -434,7 +435,9 @@ class _AskAresScreenState extends State<AskAresScreen> {
       body: SafeArea(
         top: false,
         bottom: false,
-        child: Column(
+        child: ResponsiveContentWrapper(
+          maxWidth: Responsive.maxContentWidth,
+          child: Column(
           children: [
             // Focused Meeting Context Pill (if navigating from a specific meeting)
             if (widget.meetingTitle != null)
@@ -613,9 +616,14 @@ class _AskAresScreenState extends State<AskAresScreen> {
                 ),
               ),
 
-            // Perfected Bottom Input Bar
+            // Perfected Bottom Input Bar (Responsive padding)
             Container(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, computedBottomPadding),
+              padding: EdgeInsets.fromLTRB(
+                Responsive.value(context, mobile: 16.0, narrow: 10.0),
+                10,
+                Responsive.value(context, mobile: 16.0, narrow: 10.0),
+                computedBottomPadding,
+              ),
               decoration: BoxDecoration(
                 color: AppTheme.cardBg(context),
                 border: Border(
@@ -716,6 +724,7 @@ class _AskAresScreenState extends State<AskAresScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

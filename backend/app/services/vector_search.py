@@ -15,10 +15,14 @@ def get_embedding_model():
         with _model_lock:
             if _embedding_model is None:
                 try:
+                    import torch
+                    # Restrict PyTorch to single-thread CPU execution to prevent
+                    # thread pool contention and high memory spikes
+                    torch.set_num_threads(1)
                     from sentence_transformers import SentenceTransformer
 
                     # all-MiniLM-L6-v2 produces 384-dimensional vectors. Fast and lightweight.
-                    _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+                    _embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
                 except ImportError as e:
                     msg = (
                         "sentence-transformers is not installed. "
@@ -59,12 +63,15 @@ async def process_and_store_transcript(supabase_client, meeting_id: str, transcr
     if not chunks:
         return
 
-    # Non-blocking embedding generation in threadpool with normalization and batching
-    embeddings = await run_in_threadpool(
-        lambda: model.encode(
-            chunks, batch_size=32, normalize_embeddings=True, show_progress_bar=False
-        )
-    )
+    # Non-blocking embedding generation in threadpool with normalization and inference_mode
+    def _encode_chunks():
+        import torch
+        with torch.inference_mode():
+            return model.encode(
+                chunks, batch_size=32, normalize_embeddings=True, show_progress_bar=False
+            )
+
+    embeddings = await run_in_threadpool(_encode_chunks)
 
     records = [
         {"meeting_id": meeting_id, "chunk_text": chunk, "embedding": emb.tolist()}
@@ -74,7 +81,11 @@ async def process_and_store_transcript(supabase_client, meeting_id: str, transcr
     if records:
         try:
             def insert_chunks():
-                return supabase_client.table("meeting_chunks").insert(records).execute()
+                # Batch inserts in chunks of 50 to avoid payload size limit issues
+                batch_size = 50
+                for start_idx in range(0, len(records), batch_size):
+                    batch = records[start_idx : start_idx + batch_size]
+                    supabase_client.table("meeting_chunks").insert(batch).execute()
 
             await run_in_threadpool(insert_chunks)
         except Exception as e:
@@ -91,12 +102,15 @@ async def semantic_search(supabase_client, query: str, limit: int = 5):
 
     try:
         model = await run_in_threadpool(get_embedding_model)
-        # Non-blocking query encoding with normalization
-        query_embeddings = await run_in_threadpool(
-            lambda: model.encode(
-                [query.strip()], normalize_embeddings=True, show_progress_bar=False
-            )
-        )
+        # Non-blocking query encoding with normalization and inference_mode
+        def _encode_query():
+            import torch
+            with torch.inference_mode():
+                return model.encode(
+                    [query.strip()], normalize_embeddings=True, show_progress_bar=False
+                )
+
+        query_embeddings = await run_in_threadpool(_encode_query)
         query_vector = query_embeddings[0].tolist()
 
         def execute_rpc():

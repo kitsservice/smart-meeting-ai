@@ -6,6 +6,7 @@ import '../providers/meetings_provider.dart';
 import '../services/api_service.dart';
 import '../services/offline_queue.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import '../widgets/shimmer_loading.dart';
 
 class MeetingsListScreen extends ConsumerStatefulWidget {
@@ -146,10 +147,17 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+      body: ResponsiveContentWrapper(
+        maxWidth: Responsive.maxContentWidth,
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                Responsive.horizontalPadding(context),
+                16,
+                Responsive.horizontalPadding(context),
+                12,
+              ),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
@@ -210,7 +218,11 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
           // Quick Filter Chips (All, Today, This Week)
           if (!_isSemanticSearch)
             Padding(
-              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 12),
+              padding: EdgeInsets.only(
+                left: Responsive.horizontalPadding(context),
+                right: Responsive.horizontalPadding(context),
+                bottom: 12,
+              ),
               child: Row(
                 children: [
                   _buildFilterChip('All'),
@@ -373,6 +385,7 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -426,7 +439,10 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: Responsive.horizontalPadding(context),
+        vertical: 8,
+      ),
       itemCount: _semanticResults.length,
       itemBuilder: (context, index) {
         final result = _semanticResults[index];
@@ -515,7 +531,10 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: Responsive.horizontalPadding(context),
+        vertical: 8,
+      ),
       itemCount: filteredMeetings.length,
       itemBuilder: (context, index) {
         final meeting = filteredMeetings[index];

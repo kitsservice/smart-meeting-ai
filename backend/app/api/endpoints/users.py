@@ -63,14 +63,18 @@ async def enroll_voice(
             rng = np.random.default_rng(seed)
             embedding = (rng.standard_normal(192).astype(np.float32) * 5.0).tolist()
 
-        # 2. Save it to Supabase via threadpool
+        # 2. Clean and format full name in proper Title Case (e.g., 'Rahul Sharma')
+        clean_name: str | None = None
+        if full_name and full_name.strip():
+            clean_name = " ".join(p.capitalize() for p in full_name.strip().split() if p)
+
         upsert_data: dict[str, object] = {
             "id": user_id,
             "voice_embedding": embedding,
             "voice_profile_url": "enrolled_in_ai",
         }
-        if full_name:
-            upsert_data["full_name"] = full_name
+        if clean_name:
+            upsert_data["full_name"] = clean_name
 
         def save_voice_profile():
             db.table("users").upsert(upsert_data).execute()
@@ -78,7 +82,11 @@ async def enroll_voice(
 
         await run_in_threadpool(save_voice_profile)
 
-        return {"status": "success", "message": "Voice fingerprint saved successfully!"}
+        return {
+            "status": "success",
+            "message": "Voice fingerprint calibrated and saved successfully!",
+            "display_name": clean_name or "User",
+        }
     except HTTPException:
         raise
     except Exception as e:

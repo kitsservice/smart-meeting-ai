@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 enum AresPermissionType {
   microphone,
@@ -118,17 +119,16 @@ class PermissionSheet extends StatelessWidget {
         break;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardBg(context),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border.all(
-          color: AppTheme.cardBorder(context),
-          width: 1,
-        ),
-        boxShadow: AppTheme.cardShadow(context),
+    return ResponsiveSheetContainer(
+      maxWidth: Responsive.maxSheetWidth,
+      backgroundColor: AppTheme.cardBg(context),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      padding: EdgeInsets.fromLTRB(
+        Responsive.value(context, mobile: 24.0, narrow: 14.0),
+        20,
+        Responsive.value(context, mobile: 24.0, narrow: 14.0),
+        32,
       ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       child: SafeArea(
         top: false,
         child: Column(

@@ -519,7 +519,6 @@ class ApiService {
           .eq('id', uid)
           .maybeSingle();
       if (res == null) return false;
-      final profileUrl = res['voice_profile_url']?.toString();
       final embedding = res['voice_embedding'];
       final bool hasEmbedding = embedding != null &&
           (embedding is List && embedding.length == 192);

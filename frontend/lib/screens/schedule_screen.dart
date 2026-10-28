@@ -7,6 +7,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_calendar/device_calendar.dart' as dc;
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import '../widgets/permission_sheet.dart';
 import '../services/notification_service.dart';
 import '../services/calendar_service.dart';
@@ -428,12 +429,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       ),
       body: Stack(
         children: [
-          // The Calendar (Background)
+          // The Calendar (Background - Responsive)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: TableCalendar(
+            child: ResponsiveContentWrapper(
+              maxWidth: Responsive.maxContentWidth,
+              child: TableCalendar(
               firstDay: DateTime(2020, 1, 1),
               lastDay: DateTime(2030, 12, 31),
               focusedDay: _focusedDay,
@@ -609,15 +612,19 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 ),
               ),
             ),
+            ),
           ),
 
-          // Draggable Events Sheet
+          // Draggable Events Sheet (Responsive max width & centering)
           DraggableScrollableSheet(
             initialChildSize: 0.45,
             minChildSize: 0.35,
             maxChildSize: 0.9,
             builder: (BuildContext context, ScrollController scrollController) {
-              return Container(
+              return ResponsiveContentWrapper(
+                maxWidth: Responsive.maxContentWidth,
+                alignment: Alignment.bottomCenter,
+                child: Container(
                 decoration: BoxDecoration(
                   color: AppTheme.cardBg(context),
                   borderRadius: const BorderRadius.vertical(
@@ -646,8 +653,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
 
                     // Sheet Header with Date & Legend
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Responsive.horizontalPadding(context),
                         vertical: 4.0,
                       ),
                       child: Row(
@@ -657,8 +664,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                               _selectedDay != null
                                   ? 'Events on ${_selectedDay!.day.toString().padLeft(2, '0')}/${_selectedDay!.month.toString().padLeft(2, '0')}/${_selectedDay!.year.toString().substring(2)}'
                                   : 'Events',
-                              style: const TextStyle(
-                                fontSize: 18,
+                              style: TextStyle(
+                                fontSize: Responsive.value(context, mobile: 18.0, narrow: 14.5),
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.textPrimary,
                               ),
@@ -910,6 +917,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                     ),
                   ],
                 ),
+              ),
               );
             },
           ),

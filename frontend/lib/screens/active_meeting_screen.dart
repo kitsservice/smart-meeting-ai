@@ -12,6 +12,7 @@ import '../services/room_service.dart';
 import '../services/foreground_service.dart';
 import '../services/recording_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import '../widgets/audio_waveform_visualizer.dart';
 import '../widgets/permission_sheet.dart';
 import '../services/api_service.dart';
@@ -1559,20 +1560,20 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
               tooltip: 'Meeting Language: $_selectedLanguage',
               initialValue: _selectedLanguage,
               onSelected: (val) async {
+                final messenger = ScaffoldMessenger.of(context);
                 setState(() => _selectedLanguage = val);
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.setString('setting_lang_priority', val);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Language priority set to: $val'),
-                      duration: const Duration(seconds: 2),
-                      backgroundColor: AppTheme.primaryColor,
-                    ),
-                  );
-                }
+                if (!mounted) return;
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Language priority set to: $val'),
+                    duration: const Duration(seconds: 2),
+                    backgroundColor: AppTheme.primaryColor,
+                  ),
+                );
               },
-              itemBuilder: (context) => [
+              itemBuilder: (popupCtx) => [
                 'Auto-Detect',
                 'Marathi (मराठी)',
                 'Hindi Only',
@@ -1623,9 +1624,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
               ),
             ),
             SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 8),
+              child: ResponsiveContentWrapper(
+                maxWidth: Responsive.maxContentWidth,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
                   if (roomCode != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2274,7 +2277,12 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                   // Bottom Controls
                   if (!hasStarted)
                     Container(
-                      margin: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+                      margin: EdgeInsets.fromLTRB(
+                        Responsive.value(context, mobile: 20.0, narrow: 10.0),
+                        6,
+                        Responsive.value(context, mobile: 20.0, narrow: 10.0),
+                        16,
+                      ),
                       width: double.infinity,
                       height: 50,
                       child: isParticipant
@@ -2344,11 +2352,16 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                             ),
                     )
                   else
-                    // Floating Control Bar
+                    // Floating Control Bar (Responsive margins & paddings)
                     Container(
-                      margin: const EdgeInsets.fromLTRB(20, 6, 20, 16),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
+                      margin: EdgeInsets.fromLTRB(
+                        Responsive.value(context, mobile: 20.0, narrow: 10.0),
+                        6,
+                        Responsive.value(context, mobile: 20.0, narrow: 10.0),
+                        16,
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Responsive.value(context, mobile: 18.0, narrow: 10.0),
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
@@ -2447,6 +2460,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                       ),
                     ),
                 ],
+              ),
               ),
             ),
             // Dynamic Floating Participant Join Banner

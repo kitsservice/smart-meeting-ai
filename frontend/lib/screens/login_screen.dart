@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -369,12 +370,14 @@ class _LoginScreenState extends State<LoginScreen> {
           Positioned.fill(child: CustomPaint(painter: WavesPainter())),
 
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
+            child: ResponsiveContentWrapper(
+              maxWidth: 480.0,
+              padding: EdgeInsets.symmetric(
+                horizontal: Responsive.value(context, mobile: 24.0, narrow: 16.0),
                 vertical: 20.0,
               ),
-              child: Column(
+              child: SingleChildScrollView(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 10),
@@ -435,10 +438,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Login Card
+                  // Login Card (Responsive padding)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(28),
+                    padding: EdgeInsets.all(Responsive.value(context, mobile: 28.0, narrow: 18.0)),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(24),
@@ -761,6 +764,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
                 ],
               ),
+            ),
             ),
           ),
         ],

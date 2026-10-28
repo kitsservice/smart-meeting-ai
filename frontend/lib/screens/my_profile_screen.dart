@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -97,9 +98,11 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         iconTheme: const IconThemeData(color: AppTheme.textPrimary),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+        child: ResponsiveContentWrapper(
+          maxWidth: Responsive.maxContentWidth,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(Responsive.horizontalPadding(context)),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Account Details Card
@@ -568,6 +571,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
               const SizedBox(height: 32),
             ].animate(interval: 50.ms).fade(duration: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutQuad),
           ),
+        ),
         ),
       ),
     );

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import '../services/api_service.dart';
 
 class VoiceSetupScreen extends StatefulWidget {
@@ -347,9 +348,11 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
       child: Scaffold(
         backgroundColor: AppTheme.backgroundColor,
         body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          child: ResponsiveContentWrapper(
+            maxWidth: 580.0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // Custom Header with Gradient & Centered Icon
               Container(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
@@ -694,6 +697,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
               ),
             ),
           ],
+        ),
         ),
       ),
     ),

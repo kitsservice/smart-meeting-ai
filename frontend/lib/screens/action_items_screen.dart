@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../services/calendar_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import '../widgets/shimmer_loading.dart';
 
 class ActionItemsScreen extends ConsumerStatefulWidget {
@@ -645,14 +646,21 @@ class _ActionItemsScreenState extends ConsumerState<ActionItemsScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
-      body: _isLoading
-          ? const ActionItemsSkeleton()
-          : Column(
+      body: ResponsiveContentWrapper(
+        maxWidth: Responsive.maxContentWidth,
+        child: _isLoading
+            ? const ActionItemsSkeleton()
+            : Column(
               children: [
                 // 1. Progress Banner (if tasks exist)
                 if (totalCount > 0)
                   Container(
-                    margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    margin: EdgeInsets.fromLTRB(
+                      Responsive.horizontalPadding(context),
+                      4,
+                      Responsive.horizontalPadding(context),
+                      12,
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: AppTheme.cardBg(context),
@@ -700,7 +708,9 @@ class _ActionItemsScreenState extends ConsumerState<ActionItemsScreen> {
 
                 // 2. Search Field
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.horizontalPadding(context),
+                  ),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
@@ -734,7 +744,9 @@ class _ActionItemsScreenState extends ConsumerState<ActionItemsScreen> {
 
                 // 3. Filter Chips: All | Pending | Completed
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.horizontalPadding(context),
+                  ),
                   child: Row(
                     children: [
                       _buildFilterChip('All', totalCount),
@@ -787,7 +799,12 @@ class _ActionItemsScreenState extends ConsumerState<ActionItemsScreen> {
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 80),
+                          padding: EdgeInsets.fromLTRB(
+                            Responsive.horizontalPadding(context),
+                            4,
+                            Responsive.horizontalPadding(context),
+                            80,
+                          ),
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final task = filtered[index];
@@ -797,6 +814,7 @@ class _ActionItemsScreenState extends ConsumerState<ActionItemsScreen> {
                 ),
               ],
             ),
+      ),
     );
   }
 
