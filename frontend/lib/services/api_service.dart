@@ -49,6 +49,7 @@ class ApiService {
       const devDefaults = [
         'http://127.0.0.1:8000/api/v1',
         'http://10.0.2.2:8000/api/v1',
+        'http://192.168.1.8:8000/api/v1',
       ];
       for (final d in devDefaults) {
         if (!list.contains(d)) list.add(d);
@@ -163,7 +164,7 @@ class ApiService {
     try {
       final data = await Supabase.instance.client
           .from('meetings')
-          .select('*')
+          .select('id, title, description, created_at, summary, transcript, action_items, user_id')
           .or('user_id.eq.$userId,description.ilike.%$userId%')
           .order('created_at', ascending: false)
           .limit(50);
@@ -360,6 +361,22 @@ class ApiService {
       }
     }
 
+    final user = Supabase.instance.client.auth.currentUser;
+    final userName = user?.userMetadata?['full_name'] ??
+        user?.userMetadata?['name'] ??
+        (user?.email?.split('@')[0] ?? 'Host');
+    String descWithMembers = description;
+    if (!descWithMembers.contains('[MEMBERS:')) {
+      final membersJson = jsonEncode([
+        {
+          'user_id': userId,
+          'name': userName,
+          'is_host': true,
+        }
+      ]);
+      descWithMembers = '$descWithMembers [MEMBERS:$membersJson]'.trim();
+    }
+
     final url = Uri.parse('$baseUrl/meetings/');
 
     try {
@@ -369,7 +386,7 @@ class ApiService {
             headers: _getHeaders(),
             body: jsonEncode({
               'title': title,
-              'description': description,
+              'description': descWithMembers,
               'user_id': userId,
             }),
           )
@@ -404,9 +421,27 @@ class ApiService {
     return null;
   }
 
-  Future<bool> processAudio(String meetingId, String filePath) async {
+  Future<bool> processAudio(
+    String meetingId,
+    String filePath, {
+    String? language,
+  }) async {
+    if (_cachedBaseUrl == null || _cachedBaseUrl!.isEmpty) {
+      await resolveBaseUrl();
+    }
+
+    String selectedLang = language ?? '';
+    if (selectedLang.isEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        selectedLang = prefs.getString('setting_lang_priority') ?? 'Auto-Detect';
+      } catch (_) {}
+    }
+
     for (final base in candidateBaseUrls) {
-      final url = Uri.parse('$base/meetings/$meetingId/process-audio');
+      final url = Uri.parse(
+        '$base/meetings/$meetingId/process-audio?language=${Uri.encodeComponent(selectedLang)}',
+      );
 
       try {
         // Fast probe before committing 90-second upload to an unverified candidate
@@ -417,6 +452,9 @@ class ApiService {
 
         var request = http.MultipartRequest('POST', url);
         request.headers.addAll(_getHeaders(isMultipart: true));
+        if (selectedLang.isNotEmpty) {
+          request.fields['language'] = selectedLang;
+        }
 
         // Attach the real audio file
         request.files.add(await http.MultipartFile.fromPath('file', filePath));
@@ -445,6 +483,9 @@ class ApiService {
   }
 
   Future<List<dynamic>> searchSemanticMeetings(String query) async {
+    if (_cachedBaseUrl == null || _cachedBaseUrl!.isEmpty) {
+      await resolveBaseUrl();
+    }
     final userId = _currentUserId ?? '';
     for (final base in candidateBaseUrls) {
       final url = Uri.parse(
@@ -468,12 +509,41 @@ class ApiService {
     return [];
   }
 
-  Future<bool> enrollVoice(String filePath) async {
-    final userId = _currentUserId ?? '';
-    String fullName = '';
+  Future<bool> isVoiceCalibrated([String? userId]) async {
     try {
-      fullName = Supabase.instance.client.auth.currentUser?.userMetadata?['full_name'] ?? '';
-    } catch (_) {}
+      final uid = userId ?? _currentUserId;
+      if (uid == null || uid.isEmpty) return false;
+      final res = await Supabase.instance.client
+          .from('users')
+          .select('voice_profile_url, voice_embedding')
+          .eq('id', uid)
+          .maybeSingle();
+      if (res == null) return false;
+      final profileUrl = res['voice_profile_url']?.toString();
+      final embedding = res['voice_embedding'];
+      final bool hasEmbedding = embedding != null &&
+          (embedding is List && embedding.length == 192);
+      return hasEmbedding;
+    } catch (e) {
+      debugPrint('Error checking voice calibration: $e');
+      return false;
+    }
+  }
+
+  Future<bool> enrollVoice(String filePath, {String? fullNameOverride}) async {
+    final userId = _currentUserId ?? '';
+    String fullName = fullNameOverride ?? '';
+    if (fullName.isEmpty) {
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        fullName = user?.userMetadata?['full_name'] ??
+            user?.userMetadata?['name'] ??
+            '';
+        if (fullName.isEmpty && user?.email != null) {
+          fullName = user!.email!.split('@')[0];
+        }
+      } catch (_) {}
+    }
     if (userId.isEmpty) {
       debugPrint('Error enrolling voice: user not authenticated');
       return false;
@@ -485,7 +555,7 @@ class ApiService {
       );
 
       try {
-        if (_cachedBaseUrl != base) {
+        if (_cachedBaseUrl != base && _isLocalAddress(base)) {
           final isAlive = await _isBaseUrlAlive(base);
           if (!isAlive) continue;
         }
@@ -497,9 +567,10 @@ class ApiService {
         // Attach the audio file
         request.files.add(await http.MultipartFile.fromPath('file', filePath));
 
+        // Render cold start can take 25-45s; allow 60s for full neural extraction
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 15));
+            .timeout(const Duration(seconds: 60));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {
@@ -518,29 +589,8 @@ class ApiService {
       }
     }
 
-    // Direct Supabase guarantee: If backend servers are unreachable, sleeping, or offline,
-    // guarantee the user's voice setup record is persisted directly into Supabase.
-    try {
-      debugPrint('Backend servers unreachable; saving voice enrollment directly to Supabase.');
-      await Supabase.instance.client
-          .from('users')
-          .update({'voice_profile_url': 'enrolled_in_ai'})
-          .eq('id', userId);
-      return true;
-    } catch (_) {
-      try {
-        await Supabase.instance.client.from('users').upsert({
-          'id': userId,
-          if (fullName.isNotEmpty) 'full_name': fullName,
-          'voice_profile_url': 'enrolled_in_ai',
-        });
-        return true;
-      } catch (e) {
-        debugPrint('Direct Supabase voice enrollment fallback failed: $e');
-      }
-    }
-
-    return true;
+    debugPrint('All candidate base URLs failed for voice enrollment.');
+    return false;
   }
 
   Future<bool> updateActionItemStatus(
@@ -593,5 +643,314 @@ class ApiService {
     }
 
     return false;
+  }
+
+  Future<bool> deleteActionItem(
+    String meetingId,
+    String actionItemId,
+  ) async {
+    final url = Uri.parse(
+      '$baseUrl/meetings/$meetingId/action-items/$actionItemId',
+    );
+    try {
+      final response = await _client
+          .delete(url, headers: _getHeaders())
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Error deleting action item via backend, using Supabase: $e');
+    }
+
+    // Direct Supabase fallback
+    try {
+      final res = await Supabase.instance.client
+          .from('meetings')
+          .select('action_items')
+          .eq('id', meetingId)
+          .maybeSingle();
+
+      if (res != null && res['action_items'] is List) {
+        final items = List<dynamic>.from(res['action_items']);
+        final initialLength = items.length;
+        items.removeWhere(
+          (item) => item is Map && item['id']?.toString() == actionItemId,
+        );
+
+        if (items.length != initialLength) {
+          await Supabase.instance.client
+              .from('meetings')
+              .update({'action_items': items})
+              .eq('id', meetingId);
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Direct Supabase deleteActionItem error: $e');
+    }
+
+    return false;
+  }
+
+  /// AI Chat with past meetings ("Ask Ares")
+  Future<Map<String, dynamic>> askAres(
+    String query, {
+    String? meetingId,
+  }) async {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) {
+      return {'answer': 'Please enter a valid question.', 'sources': []};
+    }
+
+    final userId = _currentUserId;
+    final url = Uri.parse('$baseUrl/meetings/ask');
+    final payload = {
+      'query': cleanQuery,
+      'meeting_id': meetingId,
+      'user_id': userId,
+    };
+
+    try {
+      final response = await _client
+          .post(
+            url,
+            headers: _getHeaders(),
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 25));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        return {
+          'answer': (decoded['answer'] ?? 'No response returned.').toString(),
+          'sources': decoded['sources'] as List? ?? [],
+        };
+      }
+    } catch (e) {
+      debugPrint('Error contacting backend /meetings/ask: $e');
+    }
+
+    // Direct Supabase Search Fallback when backend is offline
+    try {
+      final meetingsRes = await Supabase.instance.client
+          .from('meetings')
+          .select('id, title, summary, action_items, created_at')
+          .order('created_at', ascending: false)
+          .limit(8);
+
+      final meetings = meetingsRes as List<dynamic>;
+      final matching = <String>[];
+      final sources = <Map<String, dynamic>>[];
+      final qLower = cleanQuery.toLowerCase();
+
+      for (var m in meetings) {
+        final title = (m['title'] ?? 'Untitled').toString();
+        final summary = (m['summary'] ?? '').toString();
+        final items = m['action_items'] is List ? (m['action_items'] as List) : [];
+
+        bool matched = false;
+        if (title.toLowerCase().contains(qLower) ||
+            summary.toLowerCase().contains(qLower)) {
+          matched = true;
+        } else {
+          for (var it in items) {
+            final tStr = (it is Map ? it['task'] : it).toString().toLowerCase();
+            if (tStr.contains(qLower)) {
+              matched = true;
+              break;
+            }
+          }
+        }
+
+        if (matched) {
+          sources.add({'id': m['id'], 'title': title});
+          matching.add(
+            '📅 **$title**\n'
+            '${summary.isNotEmpty ? summary : "No summary available."}\n'
+            '${items.isNotEmpty ? "• Tasks: ${items.map((i) => i is Map ? i['task'] : i).join(', ')}" : ""}',
+          );
+        }
+      }
+
+      if (matching.isNotEmpty) {
+        return {
+          'answer':
+              'Here is what was found in your meeting records matching your query:\n\n${matching.join("\n\n---\n\n")}',
+          'sources': sources,
+        };
+      } else if (meetings.isNotEmpty) {
+        return {
+          'answer':
+              'I searched your recent meetings (${meetings.map((m) => m['title']).take(3).join(', ')}), but did not find any direct mentions of "$cleanQuery". Try asking with different keywords or specifying a meeting title.',
+          'sources': [],
+        };
+      }
+    } catch (e) {
+      debugPrint('Supabase direct query error in askAres: $e');
+    }
+
+    return {
+      'answer':
+          'Unable to query your meetings right now. Please check your internet connection.',
+      'sources': [],
+    };
+  }
+
+  /// Adds a custom action item to a meeting
+  Future<bool> addCustomActionItem(
+    String meetingId, {
+    required String task,
+    String? assignee,
+  }) async {
+    final newItem = {
+      'id': 'manual_${DateTime.now().millisecondsSinceEpoch}',
+      'task': task.trim(),
+      'assignee': assignee?.trim().isNotEmpty == true ? assignee!.trim() : null,
+      'is_completed': false,
+    };
+
+    try {
+      final res = await Supabase.instance.client
+          .from('meetings')
+          .select('action_items')
+          .eq('id', meetingId)
+          .maybeSingle();
+
+      List<dynamic> items = [];
+      if (res != null && res['action_items'] is List) {
+        items = List<dynamic>.from(res['action_items']);
+      }
+      items.add(newItem);
+
+      await Supabase.instance.client
+          .from('meetings')
+          .update({'action_items': items})
+          .eq('id', meetingId);
+      return true;
+    } catch (e) {
+      debugPrint('Error adding action item: $e');
+      return false;
+    }
+  }
+
+  /// Fetches an aggregated daily executive report and short summary for a specific date (YYYY-MM-DD)
+  Future<Map<String, dynamic>> getDailyReport({String? date, String? userId}) async {
+    final targetDate = date ?? DateTime.now().toIso8601String().substring(0, 10);
+    final uid = userId ?? _currentUserId;
+
+    final queryParams = <String, String>{'date': targetDate};
+    if (uid != null && uid.isNotEmpty) {
+      queryParams['user_id'] = uid;
+    }
+
+    final uri = Uri.parse('$baseUrl/meetings/daily-report').replace(
+      queryParameters: queryParams,
+    );
+
+    try {
+      final response = await _client
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Error fetching daily report from backend: $e');
+    }
+
+    // Direct Supabase Fallback when backend is unreachable
+    try {
+      final start = '${targetDate}T00:00:00';
+      final end = '${targetDate}T23:59:59.999999';
+
+      var query = Supabase.instance.client
+          .from('meetings')
+          .select('id, title, description, created_at, summary, transcript, action_items, user_id')
+          .gte('created_at', start)
+          .lte('created_at', end);
+
+      if (uid != null && uid.isNotEmpty) {
+        query = query.or('user_id.eq.$uid,description.ilike.%$uid%');
+      }
+
+      final res = await query.order('created_at', ascending: true);
+      final list = res as List<dynamic>;
+
+      if (list.isEmpty) {
+        return {
+          'status': 'empty',
+          'date': targetDate,
+          'message': 'No meetings recorded on this date.',
+          'total_meetings': 0,
+          'total_duration_formatted': '0 mins',
+          'attendees': [],
+          'short_summary': 'No meetings were recorded on this date.',
+          'key_decisions': [],
+          'action_items': [],
+          'action_items_by_assignee': {},
+          'meeting_highlights': [],
+        };
+      }
+
+      final allTasks = <Map<String, dynamic>>[];
+      final attendeesSet = <String>{};
+      final summaries = <String>[];
+
+      for (var m in list) {
+        final title = (m['title'] ?? 'Meeting').toString();
+        final summary = (m['summary'] ?? '').toString();
+        if (summary.isNotEmpty) {
+          summaries.add('$title: ${summary.split(".")[0]}.');
+        }
+        final items = m['action_items'] is List ? (m['action_items'] as List) : [];
+        for (var it in items) {
+          if (it is Map) {
+            final task = (it['task'] ?? it['text'] ?? '').toString();
+            final assignee = (it['assignee'] ?? 'Unassigned').toString();
+            if (task.isNotEmpty) {
+              allTasks.add({
+                'id': it['id'] ?? '',
+                'task': task,
+                'assignee': assignee,
+                'meeting_title': title,
+                'is_completed': it['is_completed'] == true,
+              });
+              if (assignee != 'Unassigned') attendeesSet.add(assignee);
+            }
+          }
+        }
+      }
+
+      final shortSummary = summaries.isNotEmpty
+          ? 'On $targetDate, ${list.length} meeting(s) took place. ${summaries.take(3).join(" ")} Total of ${allTasks.length} action item(s) logged.'
+          : 'On $targetDate, ${list.length} meeting(s) took place with ${allTasks.length} action item(s) captured.';
+
+      return {
+        'status': 'success',
+        'date': targetDate,
+        'total_meetings': list.length,
+        'total_duration_formatted': '${list.length * 15} mins',
+        'attendees': attendeesSet.toList(),
+        'short_summary': shortSummary,
+        'key_decisions': [],
+        'action_items': allTasks,
+        'meeting_highlights': list.map((m) => {
+          'id': m['id'],
+          'title': m['title'] ?? 'Meeting',
+          'short_summary': m['summary'] ?? '',
+          'action_item_count': (m['action_items'] is List) ? (m['action_items'] as List).length : 0,
+        }).toList(),
+      };
+    } catch (e) {
+      debugPrint('Direct Supabase daily report fallback error: $e');
+    }
+
+    return {
+      'status': 'error',
+      'date': targetDate,
+      'message': 'Failed to compile daily report. Please check your connection.',
+    };
   }
 }

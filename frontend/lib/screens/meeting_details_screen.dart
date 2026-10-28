@@ -13,6 +13,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/meetings_provider.dart';
 import '../widgets/note_dialog_sheet.dart';
+import '../widgets/shimmer_loading.dart';
+import 'ask_ares_screen.dart';
 
 class MeetingDetailsScreen extends ConsumerStatefulWidget {
   final int initialTabIndex;
@@ -108,6 +110,10 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
   }
 
   Future<void> _fetchFullDetails(String id, {bool background = false}) async {
+    if (id.startsWith('demo_')) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     Map<String, dynamic>? details;
     try {
       details = await ApiService().getMeeting(id);
@@ -187,7 +193,6 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
 
 
   Widget _buildEmptyTranscriptWidget({
-    required bool isStillLoading,
     required bool isNoSpeech,
   }) {
     return Padding(
@@ -197,39 +202,32 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: AppTheme.surfaceColor,
-                shape: BoxShape.rectangle,
-                borderRadius: BorderRadius.all(Radius.circular(999)),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppTheme.cardBg(context),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.cardBorder(context),
+                  width: 1,
+                ),
+                boxShadow: AppTheme.cardShadow(context),
               ),
-              child: isStillLoading
-                  ? const SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: AppTheme.primaryColor,
-                      ),
-                    )
-                  : Icon(
-                      isNoSpeech
-                          ? Icons.mic_off_rounded
-                          : Icons.speaker_notes_off_rounded,
-                      size: 48,
-                      color: AppTheme.textSecondary.withValues(alpha: 0.5),
-                    ),
+              child: Icon(
+                isNoSpeech
+                    ? Icons.mic_off_rounded
+                    : Icons.speaker_notes_off_rounded,
+                size: 40,
+                color: AppTheme.textSecondary.withValues(alpha: 0.6),
+              ),
             ),
             const SizedBox(height: 16),
             Text(
-              isStillLoading
-                  ? 'Loading transcription...'
-                  : (isNoSpeech
-                      ? 'No speech detected in this recording'
-                      : 'No transcription available yet.'),
+              isNoSpeech
+                  ? 'No speech detected in this recording'
+                  : 'No transcription available yet.',
               style: const TextStyle(
                 color: AppTheme.textSecondary,
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -255,7 +253,10 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _isFullTextView = false),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _isFullTextView = false);
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
@@ -284,7 +285,10 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
           ),
           Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _isFullTextView = true),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _isFullTextView = true);
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
@@ -321,14 +325,16 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
     final bool isNoSpeech = clean == 'No speech detected.';
     final bool isStillLoading = clean == 'Loading transcript...' || (_isLoading && clean.isEmpty);
 
+    if (isStillLoading) {
+      return const TranscriptSkeleton();
+    }
+
     if (clean.isEmpty ||
         clean == 'NONE' ||
         clean == 'null' ||
         clean == 'No transcript available.' ||
-        isNoSpeech ||
-        isStillLoading) {
+        isNoSpeech) {
       return _buildEmptyTranscriptWidget(
-        isStillLoading: isStillLoading,
         isNoSpeech: isNoSpeech,
       );
     }
@@ -395,76 +401,120 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
   }
 
   Widget _buildChatBubble(_TranscriptSegment item, int index) {
+    final isYou = item.speaker.toLowerCase().trim() == 'you' ||
+        item.speaker.toLowerCase().contains('host');
+
     return Padding(
       padding: EdgeInsets.only(
-        bottom: item.isNewSpeaker ? 4.0 : 16.0,
-        top: item.isNewSpeaker && index != 0 ? 24.0 : 0.0,
+        bottom: item.isNewSpeaker ? 6.0 : 12.0,
+        top: item.isNewSpeaker && index != 0 ? 18.0 : 0.0,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Speaker Avatar
           SizedBox(
-            width: 48,
+            width: 44,
             child: item.isNewSpeaker
                 ? Container(
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
                       color: item.speakerColor.withValues(alpha: 0.12),
-                      shape: BoxShape.rectangle,
-                      borderRadius: const BorderRadius.all(
-                        Radius.circular(999),
-                      ),
+                      shape: BoxShape.circle,
                       border: Border.all(
-                        color: item.speakerColor.withValues(alpha: 0.2),
-                        width: 1,
+                        color: item.speakerColor.withValues(alpha: 0.3),
+                        width: 1.5,
                       ),
                     ),
                     child: Center(
-                      child: Text(
-                        item.speaker.isNotEmpty
-                            ? item.speaker[0].toUpperCase()
-                            : '?',
-                        style: TextStyle(
-                          color: item.speakerColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
+                      child: isYou
+                          ? Icon(
+                              Icons.person_rounded,
+                              size: 18,
+                              color: item.speakerColor,
+                            )
+                          : Text(
+                              item.speaker.isNotEmpty
+                                  ? item.speaker[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                color: item.speakerColor,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
                     ),
                   )
                 : const SizedBox.shrink(),
           ),
           const SizedBox(width: 8),
 
+          // Message content + Speaker badge
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (item.isNewSpeaker)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 6.0, top: 6.0),
+                    padding: const EdgeInsets.only(bottom: 8.0, top: 4.0),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          item.speaker,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: item.speakerColor,
-                            fontSize: 14,
+                        // Speaker pill badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 3.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: item.speakerColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: item.speakerColor.withValues(alpha: 0.25),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isYou
+                                    ? Icons.mic_rounded
+                                    : Icons.record_voice_over_rounded,
+                                size: 12,
+                                color: item.speakerColor,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                item.speaker,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: item.speakerColor,
+                                  fontSize: 12.5,
+                                  letterSpacing: -0.1,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         if (item.timeString != null) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
+                              horizontal: 7,
+                              vertical: 3.5,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white.withValues(alpha: 0.05)
+                                  : Colors.black.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppTheme.cardBorder(context),
+                                width: 0.8,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -474,7 +524,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
                                   size: 11,
                                   color: AppTheme.textSecondary,
                                 ),
-                                const SizedBox(width: 3),
+                                const SizedBox(width: 3.5),
                                 Text(
                                   item.timeString!,
                                   style: const TextStyle(
@@ -491,17 +541,34 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
                     ),
                   ),
 
-                // Speech Bubble
+                // Speech Bubble Card
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                    horizontal: 14,
+                    vertical: 11,
                   ),
-                  child: Text(
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardBg(context),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(
+                        item.isNewSpeaker ? 4 : AppTheme.radiusCard,
+                      ),
+                      topRight: const Radius.circular(AppTheme.radiusCard),
+                      bottomLeft: const Radius.circular(AppTheme.radiusCard),
+                      bottomRight: const Radius.circular(AppTheme.radiusCard),
+                    ),
+                    border: Border.all(
+                      color: AppTheme.cardBorder(context),
+                      width: 1,
+                    ),
+                    boxShadow: AppTheme.cardShadow(context),
+                  ),
+                  child: SelectableText(
                     item.text,
                     style: const TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
+                      fontSize: 14.5,
+                      height: 1.55,
                       color: AppTheme.textPrimary,
                       letterSpacing: 0.1,
                     ),
@@ -519,14 +586,25 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
     final clean = transcript.trim();
     final bool isNoSpeech = clean == 'No speech detected.';
     final bool isStillLoading = clean == 'Loading transcript...' || (_isLoading && clean.isEmpty);
-    final bool isEmptyOrLoading = clean.isEmpty ||
+    final bool isEmpty = clean.isEmpty ||
         clean == 'NONE' ||
         clean == 'null' ||
         clean == 'No transcript available.' ||
-        isNoSpeech ||
-        isStillLoading;
+        isNoSpeech;
 
-    if (isEmptyOrLoading) {
+    if (isStillLoading) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: _buildTopToggle(),
+          ),
+          const TranscriptSkeleton(),
+        ],
+      );
+    }
+
+    if (isEmpty) {
       return ListView(
         children: [
           Padding(
@@ -534,7 +612,6 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
             child: _buildTopToggle(),
           ),
           _buildEmptyTranscriptWidget(
-            isStillLoading: isStillLoading,
             isNoSpeech: isNoSpeech,
           ),
         ],
@@ -1097,6 +1174,25 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
           actions: [
             IconButton(
               icon: const Icon(
+                Icons.smart_toy_rounded,
+                color: AppTheme.primaryColor,
+              ),
+              tooltip: 'Ask Ares about this meeting',
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AskAresScreen(
+                      meetingId: meetingId,
+                      meetingTitle: title,
+                    ),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(
                 Icons.copy_rounded,
                 color: AppTheme.primaryColor,
               ),
@@ -1176,13 +1272,14 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
                 },
               ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
+            onTap: (_) => HapticFeedback.selectionClick(),
             isScrollable: true,
             tabAlignment: TabAlignment.center,
             labelColor: AppTheme.primaryColor,
             unselectedLabelColor: AppTheme.textSecondary,
             indicatorColor: AppTheme.primaryColor,
-            tabs: [
+            tabs: const [
               Tab(text: 'Transcript'),
               Tab(text: 'Notes'),
               Tab(text: 'AI Summary'),
@@ -1496,7 +1593,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
       bool isNewSpeaker = false;
 
       final colonIndex = cleanLine.indexOf(':');
-      if (colonIndex != -1 && colonIndex < 30) {
+      if (colonIndex != -1 && colonIndex < 50) {
         final potentialSpeaker = cleanLine
             .substring(0, colonIndex)
             .trim()
@@ -1507,12 +1604,21 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
           isNewSpeaker = true;
 
           final lower = currentSpeaker.toLowerCase();
-          if (lower.contains('1') || lower == 'you') {
+          if (lower == 'you' || lower.contains('host')) {
             currentSpeakerColor = AppTheme.primaryColor;
-          } else if (lower.contains('2')) {
-            currentSpeakerColor = AppTheme.accentColor;
           } else {
-            currentSpeakerColor = Colors.teal;
+            const palette = [
+              AppTheme.accentColor,
+              Colors.teal,
+              Colors.deepOrange,
+              Colors.purple,
+              Colors.indigo,
+              Colors.amber,
+              Colors.pink,
+              Colors.cyan,
+            ];
+            final hash = currentSpeaker.hashCode.abs();
+            currentSpeakerColor = palette[hash % palette.length];
           }
         }
         text = cleanLine.substring(colonIndex + 1).trim();

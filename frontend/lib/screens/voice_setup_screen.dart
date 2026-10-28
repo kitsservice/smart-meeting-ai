@@ -142,12 +142,19 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           if (mounted) {
             setState(() {
               _recordSeconds++;
+              final targetWords = (_recordSeconds * 2.2).toInt();
+              if (_highlightedWordIndex < targetWords && _highlightedWordIndex < _words.length) {
+                _highlightedWordIndex = targetWords.clamp(0, _words.length);
+              }
             });
+
+            if (_recordSeconds >= 6 && _highlightedWordIndex >= _words.length) {
+              _toggleRecording();
+            }
           }
         });
 
         // Real-time amplitude listener: advances Karaoke words as user speaks
-        // Completely silent on Android - ZERO system beeps or interruptions!
         _amplitudeSub = _audioRecorder
             .onAmplitudeChanged(const Duration(milliseconds: 100))
             .listen((amp) {
@@ -158,11 +165,10 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                 _currentAmplitude = current;
               });
 
-              // Voice activity threshold: typical speaking voice is > -36 dB
-              if (current > -36.0) {
+              // Sensitive down to -52 dB on mobile microphones
+              if (current > -52.0) {
                 _speechTicks++;
-                // Advance word every ~300ms of active voice
-                if (_speechTicks % 3 == 0) {
+                if (_speechTicks % 2 == 0) {
                   if (_highlightedWordIndex < _words.length) {
                     setState(() {
                       _highlightedWordIndex++;
@@ -197,26 +203,24 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        // 1. Immediately mark the user as enrolled in Supabase DB so account setup is complete
-        try {
-          await Supabase.instance.client
-              .from('users')
-              .update({'voice_profile_url': 'enrolled_in_ai'})
-              .eq('id', user.id);
-        } catch (_) {
-          await Supabase.instance.client
-              .from('users')
-              .upsert({'id': user.id, 'voice_profile_url': 'enrolled_in_ai'});
+        // 1. Upload voice sample to backend to extract 192-dim neural biometrics embedding
+        final enrolled = await ApiService().enrollVoice(_recordedFilePath!);
+
+        if (!enrolled) {
+          if (mounted) {
+            setState(() => _isUploading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not reach AI voice biometrics server. Please ensure the server is running and try again.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
         }
 
-        // 2. Attempt backend biometrics enrollment asynchronously
-        try {
-          await ApiService().enrollVoice(_recordedFilePath!);
-        } catch (e) {
-          debugPrint('Backend biometrics enrollment offline notice: $e');
-        }
-
-        // 3. Play confirmation sound & haptic feedback
+        // 2. Play confirmation sound & haptic feedback
         try {
           SystemSound.play(SystemSoundType.click);
           HapticFeedback.mediumImpact();
@@ -236,11 +240,21 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
               duration: Duration(seconds: 2),
             ),
           );
-          Navigator.pushReplacementNamed(context, '/home');
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context, true);
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       } catch (e) {
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
+          setState(() => _isUploading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error saving voice profile: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       }
     } else {
@@ -273,7 +287,11 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           duration: Duration(seconds: 2),
         ),
       );
-      Navigator.pushReplacementNamed(context, '/home');
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, false);
+      } else {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
     }
   }
 
@@ -319,7 +337,11 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          Navigator.pushReplacementNamed(context, '/home');
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context, true);
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       },
       child: Scaffold(
@@ -619,11 +641,9 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                           ],
                         ),
                         child: ElevatedButton(
-                          onPressed: (_hasRecorded &&
-                                  !_isRecording &&
-                                  !_isUploading)
-                              ? _finishSetup
-                              : null,
+                          onPressed: (_isUploading || (!_hasRecorded && !_isRecording))
+                              ? null
+                              : _finishSetup,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.transparent,
                             shadowColor: Colors.transparent,
@@ -632,17 +652,35 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                             ),
                           ),
                           child: _isUploading
-                              ? const SizedBox(
-                                  height: 22,
-                                  width: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
+                              ? const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    ),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'Calibrating AI Voice...',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
                                 )
-                              : const Text(
-                                  'Complete Setup',
-                                  style: TextStyle(
+                              : Text(
+                                  _isRecording
+                                      ? 'Finish & Save Voice'
+                                      : (_hasRecorded
+                                          ? 'Complete Setup'
+                                          : 'Record Phrase First'),
+                                  style: const TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,

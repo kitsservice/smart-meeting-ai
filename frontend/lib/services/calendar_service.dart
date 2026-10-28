@@ -87,6 +87,10 @@ class CalendarService {
         start: tz.TZDateTime.from(startTime, tz.local),
         end: tz.TZDateTime.from(actualEndTime, tz.local),
         location: location,
+        reminders: [
+          dc.Reminder(minutes: 5),
+          dc.Reminder(minutes: 30),
+        ],
       );
 
       final createRes = await _deviceCalendarPlugin.createOrUpdateEvent(event);

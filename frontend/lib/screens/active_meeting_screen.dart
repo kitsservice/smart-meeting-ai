@@ -12,6 +12,9 @@ import '../services/room_service.dart';
 import '../services/foreground_service.dart';
 import '../services/recording_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/audio_waveform_visualizer.dart';
+import '../widgets/permission_sheet.dart';
+import '../services/api_service.dart';
 
 class ActiveMeetingScreen extends ConsumerStatefulWidget {
   const ActiveMeetingScreen({super.key});
@@ -30,6 +33,8 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
   bool isParticipant = false;
   bool hasStarted = false;
   String? roomCode;
+  bool _isVoiceCalibrated = false;
+  String _selectedLanguage = 'Auto-Detect';
 
   RealtimeChannel? _roomChannel;
   List<Map<String, dynamic>> _participants = [];
@@ -57,6 +62,123 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     });
   }
 
+  Future<void> _checkVoiceCalibration() async {
+    final calibrated = await ApiService().isVoiceCalibrated();
+    if (mounted) {
+      setState(() {
+        _isVoiceCalibrated = calibrated;
+      });
+    }
+  }
+
+  Future<void> _openVoiceCalibration() async {
+    HapticFeedback.lightImpact();
+    final res = await Navigator.pushNamed(context, '/voice_setup');
+    if (res == true || mounted) {
+      await _checkVoiceCalibration();
+    }
+  }
+
+  Widget _buildVoiceCalibrationBanner() {
+    final user = Supabase.instance.client.auth.currentUser;
+    final displayName = user?.userMetadata?['full_name'] ??
+        user?.userMetadata?['name'] ??
+        (user?.email?.split('@')[0] ?? 'You');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _isVoiceCalibrated
+            ? const Color(0xFF10B981).withValues(alpha: 0.12)
+            : const Color(0xFFF59E0B).withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isVoiceCalibrated
+              ? const Color(0xFF10B981).withValues(alpha: 0.35)
+              : const Color(0xFFF59E0B).withValues(alpha: 0.45),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _isVoiceCalibrated
+                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                  : const Color(0xFFF59E0B).withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              _isVoiceCalibrated
+                  ? Icons.verified_user_rounded
+                  : Icons.mic_external_on_rounded,
+              color: _isVoiceCalibrated
+                  ? const Color(0xFF34D399)
+                  : const Color(0xFFFBBF24),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _isVoiceCalibrated
+                      ? 'Voice Profile Calibrated'
+                      : 'Voice Calibration Recommended',
+                  style: TextStyle(
+                    color: _isVoiceCalibrated
+                        ? const Color(0xFF34D399)
+                        : const Color(0xFFFBBF24),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isVoiceCalibrated
+                      ? 'Recognized in transcript as "$displayName"'
+                      : 'Calibrate now to show your name in transcript',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 11.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _openVoiceCalibration,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _isVoiceCalibrated
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : const Color(0xFFF59E0B),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                _isVoiceCalibrated ? 'Recalibrate' : 'Calibrate',
+                style: TextStyle(
+                  color: _isVoiceCalibrated ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   final ValueNotifier<int> _recordDurationNotifier = ValueNotifier<int>(0);
   int get _recordDuration => _recordDurationNotifier.value;
   Timer? _timer;
@@ -64,15 +186,20 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
 
   void _onRecordingServiceUpdate() {
     if (!mounted) return;
-    setState(() {
-      isRecording = _recordingService.isRecording;
-      hasStarted = _recordingService.hasStarted;
-      _recordDurationNotifier.value = _recordingService.recordDuration;
-    });
-    if (isRecording && !_animationController.isAnimating) {
-      _animationController.repeat();
-    } else if (!isRecording && _animationController.isAnimating) {
-      _animationController.stop();
+    final newIsRecording = _recordingService.isRecording;
+    final newHasStarted = _recordingService.hasStarted;
+    _recordDurationNotifier.value = _recordingService.recordDuration;
+
+    if (isRecording != newIsRecording || hasStarted != newHasStarted) {
+      setState(() {
+        isRecording = newIsRecording;
+        hasStarted = newHasStarted;
+      });
+      if (newIsRecording && !_animationController.isAnimating) {
+        _animationController.repeat();
+      } else if (!newIsRecording && _animationController.isAnimating) {
+        _animationController.stop();
+      }
     }
   }
 
@@ -85,6 +212,20 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     );
 
     _recordingService.addListener(_onRecordingServiceUpdate);
+    _checkVoiceCalibration();
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) {
+        setState(() {
+          _selectedLanguage =
+              prefs.getString('setting_lang_priority') ?? 'Auto-Detect';
+        });
+      }
+    });
+    MeetingForegroundService.onStopRequested = () {
+      if (mounted) {
+        endMeeting();
+      }
+    };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_recordingService.hasSession) {
@@ -192,7 +333,20 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
 
   Future<void> _startRecording() async {
     if (isParticipant) return; // Participants don't record
+    HapticFeedback.mediumImpact();
     try {
+      // Educational pre-permission check
+      if (!await _recordingService.recorder.hasPermission(request: false)) {
+        if (mounted) {
+          final granted = await PermissionSheet.show(
+            context,
+            type: AresPermissionType.microphone,
+          );
+          if (!granted) return;
+        }
+      }
+      if (!mounted) return;
+
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       final title = args?['title'] ??
@@ -1058,6 +1212,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
   @override
   void dispose() {
     _recordingService.removeListener(_onRecordingServiceUpdate);
+    MeetingForegroundService.onStopRequested = null;
     _floatingBannerTimer?.cancel();
     _presenceSyncTimer?.cancel();
     _animationController.dispose();
@@ -1073,6 +1228,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
   }
 
   Future<void> endMeeting() async {
+    HapticFeedback.mediumImpact();
     if (isParticipant) {
       _recordingService.reset();
       MeetingForegroundService().stopService();
@@ -1256,6 +1412,10 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
           summaryInfo: 'Recorded for ${_formatDuration(_recordDuration)}',
           participants: _participants,
         );
+      } else {
+        // Direct / solo recording: always embed user participant metadata with real name
+        final membersJson = jsonEncode(_participants);
+        meetingDescription = "[MEMBERS:$membersJson] $meetingDescription";
       }
       if (!mounted) return;
 
@@ -1272,6 +1432,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
         meetingTitle,
         meetingDescription,
         savedPath,
+        language: _selectedLanguage,
       );
 
       // SHOW SUCCESS NOTIFICATION
@@ -1393,9 +1554,51 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
           ),
           centerTitle: true,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.more_horiz, color: Colors.white),
-              onPressed: () {},
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.language, color: Colors.white),
+              tooltip: 'Meeting Language: $_selectedLanguage',
+              initialValue: _selectedLanguage,
+              onSelected: (val) async {
+                setState(() => _selectedLanguage = val);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('setting_lang_priority', val);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Language priority set to: $val'),
+                      duration: const Duration(seconds: 2),
+                      backgroundColor: AppTheme.primaryColor,
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                'Auto-Detect',
+                'Marathi (मराठी)',
+                'Hindi Only',
+                'Hinglish (Code-Mixed)',
+                'English Only',
+              ]
+                  .map(
+                    (lang) => PopupMenuItem(
+                      value: lang,
+                      child: Row(
+                        children: [
+                          if (_selectedLanguage == lang)
+                            const Icon(
+                              Icons.check,
+                              size: 18,
+                              color: AppTheme.primaryColor,
+                            )
+                          else
+                            const SizedBox(width: 18),
+                          const SizedBox(width: 8),
+                          Text(lang),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ],
         ),
@@ -1422,192 +1625,146 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
             SafeArea(
               child: Column(
                 children: [
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
                   if (roomCode != null)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                isParticipant ? 'Connected to Room: $roomCode' : 'Room Code: $roomCode',
-                                style: const TextStyle(
-                                  color: AppTheme.primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  letterSpacing: 2,
-                                ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.3),
                               ),
-                              if (!isParticipant) ...[
-                                const SizedBox(width: 8),
-                                GestureDetector(
-                                  onTap: () async {
-                                    HapticFeedback.lightImpact();
-                                    try {
-                                      await Clipboard.setData(ClipboardData(text: roomCode ?? ''));
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Room code copied to clipboard!')),
-                                        );
-                                      }
-                                      await SharePlus.instance.share(
-                                        ShareParams(
-                                          text:
-                                              'Join my Smart Meeting session! Enter code: $roomCode',
-                                        ),
-                                      );
-                                    } catch (e) {
-                                      debugPrint('Share error: $e');
-                                    }
-                                  },
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4.0),
-                                    child: Icon(
-                                      Icons.ios_share_rounded,
-                                      color: AppTheme.primaryColor,
-                                      size: 22,
-                                    ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  isParticipant
+                                      ? 'Room: $roomCode'
+                                      : 'Room Code: $roomCode',
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    letterSpacing: 1.5,
                                   ),
                                 ),
+                                if (!isParticipant) ...[
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      HapticFeedback.lightImpact();
+                                      try {
+                                        await Clipboard.setData(
+                                          ClipboardData(text: roomCode ?? ''),
+                                        );
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Room code copied to clipboard!',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                        await SharePlus.instance.share(
+                                          ShareParams(
+                                            text:
+                                                'Join my Smart Meeting session! Enter code: $roomCode',
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        debugPrint('Share error: $e');
+                                      }
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(2.0),
+                                      child: Icon(
+                                        Icons.ios_share_rounded,
+                                        color: AppTheme.primaryColor,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (roomCode != null) ...[
-                    const SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: _showParticipantsSheet,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(
-                            color:
-                                const Color(0xFF10B981).withValues(alpha: 0.35),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF10B981)
-                                  .withValues(alpha: 0.12),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
                             ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
+                          ),
+                          GestureDetector(
+                            onTap: _showParticipantsSheet,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                shape: BoxShape.circle,
+                                color: const Color(0xFF0F172A).withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: 0.35),
+                                  width: 1.2,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: const Color(0xFF10B981)
-                                        .withValues(alpha: 0.8),
-                                    blurRadius: 6,
-                                    spreadRadius: 1.5,
+                                        .withValues(alpha: 0.12),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${_participants.length} ${_participants.length == 1 ? 'Person' : 'People'} in Meeting',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    size: 18,
+                                    color: Colors.white70,
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${_participants.length} ${_participants.length == 1 ? 'Person' : 'People'} in Meeting',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13.5,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                            if (_participants.length > 1) ...[
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                height: 20,
-                                width: (_participants.length.clamp(1, 3) * 14.0) +
-                                    6,
-                                child: Stack(
-                                  children: [
-                                    for (int i = 0;
-                                        i < _participants.length.clamp(1, 3);
-                                        i++)
-                                      Positioned(
-                                        left: i * 14.0,
-                                        child: Container(
-                                          width: 20,
-                                          height: 20,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: _participants[i]
-                                                        ['is_host'] ==
-                                                    true
-                                                ? AppTheme.primaryColor
-                                                : const Color(0xFF06B6D4),
-                                            border: Border.all(
-                                              color: const Color(0xFF0F172A),
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              (_participants[i]['name'] ?? '?')
-                                                      .toString()
-                                                      .isNotEmpty
-                                                  ? (_participants[i]['name'] ??
-                                                          '?')
-                                                      .toString()[0]
-                                                      .toUpperCase()
-                                                  : '?',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.arrow_drop_down_rounded,
-                              size: 20,
-                              color: Colors.white70,
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
                   // Status Indicator Pill
                   Container(
-                    margin: const EdgeInsets.only(top: 14, bottom: 8),
+                    margin: const EdgeInsets.only(top: 8, bottom: 6),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                      horizontal: 14,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
                       color: !hasStarted
@@ -1629,8 +1786,8 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 8,
-                          height: 8,
+                          width: 7,
+                          height: 7,
                           decoration: BoxDecoration(
                             color: !hasStarted
                                 ? const Color(0xFFF59E0B)
@@ -1640,7 +1797,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Text(
                           !hasStarted
                               ? (isParticipant
@@ -1660,24 +1817,24 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                     ? const Color(0xFFFF6B6B)
                                     : Colors.orange),
                             fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            letterSpacing: 0.5,
+                            fontSize: 11.5,
+                            letterSpacing: 0.4,
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
                   // Sleek Timer
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
+                      horizontal: 20,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: BorderRadius.circular(24),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.1),
                       ),
@@ -1687,8 +1844,8 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                       children: [
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
-                          width: 10,
-                          height: 10,
+                          width: 8,
+                          height: 8,
                           decoration: BoxDecoration(
                             color: !hasStarted
                                 ? Colors.grey
@@ -1704,14 +1861,14 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                       color: AppTheme.dangerColor.withValues(
                                         alpha: 0.6,
                                       ),
-                                      blurRadius: 8,
-                                      spreadRadius: 2,
+                                      blurRadius: 6,
+                                      spreadRadius: 1.5,
                                     ),
                                   ]
                                 : [],
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         ValueListenableBuilder<int>(
                           valueListenable: _recordDurationNotifier,
                           builder: (context, duration, _) {
@@ -1719,7 +1876,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                               _formatDuration(duration),
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 32,
+                                fontSize: 26,
                                 fontWeight: FontWeight.w200,
                                 letterSpacing: 2,
                                 fontFeatures: [FontFeature.tabularFigures()],
@@ -1819,6 +1976,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                             color: Color(0xFFF59E0B),
                                           ),
                                         ),
+                                        _buildVoiceCalibrationBanner(),
                                       ],
                                     )
                                   : Column(
@@ -1877,89 +2035,234 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                             ),
                                           ),
                                         ),
+                                        _buildVoiceCalibrationBanner(),
                                       ],
                                     ))
                               : RepaintBoundary(
-                                  child: Stack(
-                                    alignment: Alignment.center,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      // Premium Pulse Rings
-                                      RepaintBoundary(
-                                        child: AnimatedBuilder(
-                                          animation: _animationController,
-                                          builder: (context, _) {
-                                            return Stack(
-                                              alignment: Alignment.center,
-                                              children: List.generate(3, (index) {
-                                                final delay = index * 0.33;
-                                                final double value =
-                                                    (_animationController.value +
-                                                            delay) %
-                                                        1.0;
-                                                final size = 120 + (value * 200);
-                                                return Container(
-                                                  width: size,
-                                                  height: size,
-                                                  decoration: BoxDecoration(
-                                                    borderRadius:
-                                                        const BorderRadius.all(
-                                                      Radius.circular(999),
-                                                    ),
-                                                    color: AppTheme.primaryColor
-                                                        .withValues(
-                                                      alpha: isRecording
-                                                          ? (1.0 - value) * 0.15
-                                                          : 0,
-                                                    ),
-                                                    border: Border.all(
-                                                      color: AppTheme.primaryColor
-                                                          .withValues(
-                                                        alpha: isRecording
-                                                            ? (1.0 - value) * 0.3
-                                                            : 0,
-                                                      ),
-                                                      width: 1,
+                                      // Interruption Alert Banner
+                                      if (_recordingService.isInterrupted)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 20,
+                                            left: 20,
+                                            right: 20,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 10,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF59E0B)
+                                                  .withValues(alpha: 0.15),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: const Color(0xFFF59E0B)
+                                                    .withValues(alpha: 0.4),
+                                                width: 1.2,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.phone_missed_rounded,
+                                                  color: Color(0xFFF59E0B),
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                const Expanded(
+                                                  child: Text(
+                                                    'Audio interrupted by system. Tap Resume to continue.',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
                                                     ),
                                                   ),
-                                                );
-                                              }),
-                                            );
-                                          },
+                                                ),
+                                                const SizedBox(width: 8),
+                                                ElevatedButton(
+                                                  onPressed:
+                                                      _pauseOrResumeRecording,
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        const Color(0xFFF59E0B),
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        10,
+                                                      ),
+                                                    ),
+                                                    elevation: 0,
+                                                  ),
+                                                  child: const Text(
+                                                    'Resume',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      // Central Mic Button (Glassmorphism)
-                                      Container(
-                                        width: 120,
-                                        height: 120,
-                                        decoration: BoxDecoration(
-                                          borderRadius:
-                                              const BorderRadius.all(
+
+                                      // Central Mic with Amplitude-Enhanced Pulse
+                                      Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          // Premium Pulse Rings
+                                          RepaintBoundary(
+                                            child: AnimatedBuilder(
+                                              animation: _animationController,
+                                              builder: (context, _) {
+                                                final amp = _recordingService
+                                                    .currentAmplitude;
+                                                return Stack(
+                                                  alignment: Alignment.center,
+                                                  children: List.generate(
+                                                      3, (index) {
+                                                    final delay = index * 0.33;
+                                                    final double value =
+                                                        (_animationController
+                                                                    .value +
+                                                                delay) %
+                                                            1.0;
+                                                    final ampBoost = isRecording
+                                                        ? (amp * 25.0)
+                                                        : 0.0;
+                                                    final size = 96 +
+                                                        (value *
+                                                            (90 + ampBoost));
+                                                    return Container(
+                                                      width: size,
+                                                      height: size,
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .all(
+                                                          Radius.circular(999),
+                                                        ),
+                                                        color: AppTheme
+                                                            .primaryColor
+                                                            .withValues(
+                                                          alpha: isRecording
+                                                              ? (1.0 - value) *
+                                                                  (0.12 +
+                                                                      (amp *
+                                                                          0.12))
+                                                              : 0,
+                                                        ),
+                                                        border: Border.all(
+                                                          color: AppTheme
+                                                              .primaryColor
+                                                              .withValues(
+                                                            alpha: isRecording
+                                                                ? (1.0 -
+                                                                        value) *
+                                                                    (0.25 +
+                                                                        (amp *
+                                                                            0.25))
+                                                                : 0,
+                                                          ),
+                                                          width: 1,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          // Central Mic Button (Glassmorphism)
+                                          Container(
+                                            width: 96,
+                                            height: 96,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  const BorderRadius.all(
                                                 Radius.circular(999),
                                               ),
-                                          color: Colors.white.withValues(
-                                            alpha: 0.05,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.1,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.05,
+                                              ),
+                                              border: Border.all(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                width: 1.5,
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: AppTheme.primaryColor
+                                                      .withValues(
+                                                    alpha: isRecording
+                                                        ? (0.2 +
+                                                            (_recordingService
+                                                                    .currentAmplitude *
+                                                                0.3))
+                                                        : 0.1,
+                                                  ),
+                                                  blurRadius: isRecording
+                                                      ? (25 +
+                                                          (_recordingService
+                                                                  .currentAmplitude *
+                                                              20))
+                                                      : 16,
+                                                  spreadRadius: isRecording
+                                                      ? (4 +
+                                                          (_recordingService
+                                                                  .currentAmplitude *
+                                                              6))
+                                                      : 2,
+                                                ),
+                                              ],
                                             ),
-                                            width: 1.5,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: AppTheme.primaryColor
-                                                  .withValues(alpha: 0.2),
-                                              blurRadius: 40,
-                                              spreadRadius: 10,
+                                            child: Icon(
+                                              isRecording
+                                                  ? Icons.mic_rounded
+                                                  : Icons.mic_off_rounded,
+                                              color: Colors.white,
+                                              size: 40,
                                             ),
-                                          ],
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 14),
+
+                                      // Real Audio Waveform Visualizer
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
                                         ),
-                                        child: Icon(
-                                          isRecording
-                                              ? Icons.mic_rounded
-                                              : Icons.mic_off_rounded,
-                                          color: Colors.white,
-                                          size: 48,
+                                        child: ValueListenableBuilder<List<double>>(
+                                          valueListenable: _recordingService.waveformNotifier,
+                                          builder: (context, samples, _) {
+                                            return AudioWaveformVisualizer(
+                                              samples: samples,
+                                              isRecording: isRecording,
+                                              isInterrupted: _recordingService.isInterrupted,
+                                              currentAmplitude: _recordingService.currentAmplitude,
+                                              height: 38,
+                                            );
+                                          },
                                         ),
                                       ),
                                     ],
@@ -1971,26 +2274,22 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                   // Bottom Controls
                   if (!hasStarted)
                     Container(
-                      margin: const EdgeInsets.only(
-                        left: 24,
-                        right: 24,
-                        bottom: 48,
-                      ),
+                      margin: const EdgeInsets.fromLTRB(20, 6, 20, 16),
                       width: double.infinity,
-                      height: 56,
+                      height: 50,
                       child: isParticipant
                           ? OutlinedButton.icon(
                               onPressed: () => Navigator.pop(context),
                               icon: const Icon(
                                 Icons.exit_to_app_rounded,
                                 color: Colors.white70,
-                                size: 24,
+                                size: 22,
                               ),
                               label: const Text(
                                 'Leave Waiting Room',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1999,7 +2298,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                   color: Colors.white.withValues(alpha: 0.2),
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                                 backgroundColor:
                                     Colors.white.withValues(alpha: 0.05),
@@ -2008,13 +2307,13 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                           : Container(
                               decoration: BoxDecoration(
                                 gradient: AppTheme.primaryGradient,
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppTheme.primaryColor
                                         .withValues(alpha: 0.3),
-                                    blurRadius: 16,
-                                    offset: const Offset(0, 4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 3),
                                   ),
                                 ],
                               ),
@@ -2023,13 +2322,13 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                 icon: const Icon(
                                   Icons.play_arrow_rounded,
                                   color: Colors.white,
-                                  size: 28,
+                                  size: 26,
                                 ),
                                 label: const Text(
                                   'Start Meeting',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 18,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 0.5,
                                   ),
@@ -2038,7 +2337,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                   backgroundColor: Colors.transparent,
                                   shadowColor: Colors.transparent,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
                               ),
@@ -2047,26 +2346,22 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                   else
                     // Floating Control Bar
                     Container(
-                      margin: const EdgeInsets.only(
-                        left: 24,
-                        right: 24,
-                        bottom: 48,
-                      ),
+                      margin: const EdgeInsets.fromLTRB(20, 6, 20, 16),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 20,
+                        horizontal: 18,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(32),
+                        borderRadius: BorderRadius.circular(26),
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.1),
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 30,
-                            offset: const Offset(0, 10),
+                            blurRadius: 20,
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
@@ -2098,8 +2393,8 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                               GestureDetector(
                                 onTap: endMeeting,
                                 child: Container(
-                                  width: 72,
-                                  height: 72,
+                                  width: 58,
+                                  height: 58,
                                   decoration: BoxDecoration(
                                     color: AppTheme.dangerColor.withValues(
                                       alpha: 0.2,
@@ -2116,8 +2411,8 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                         color: AppTheme.dangerColor.withValues(
                                           alpha: 0.3,
                                         ),
-                                        blurRadius: 16,
-                                        spreadRadius: 4,
+                                        blurRadius: 12,
+                                        spreadRadius: 2,
                                       ),
                                     ],
                                   ),
@@ -2126,16 +2421,16 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                         ? Icons.logout_rounded
                                         : Icons.stop_rounded,
                                     color: AppTheme.dangerColor,
-                                    size: 34,
+                                    size: 28,
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Text(
                                 isParticipant ? 'Leave Room' : 'End Meeting',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -2326,19 +2621,23 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
         GestureDetector(
           onTap: onTap,
           child: Container(
-            width: 64,
-            height: 64,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: const BorderRadius.all(Radius.circular(999)),
             ),
-            child: Icon(icon, color: iconColor, size: 28),
+            child: Icon(icon, color: iconColor, size: 24),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 5),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );

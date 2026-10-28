@@ -16,6 +16,7 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   bool _navigated = false;
+  Timer? _displayTimer;
 
   @override
   void initState() {
@@ -45,6 +46,18 @@ class _SplashScreenState extends State<SplashScreen>
   Future<String> _determineNextRoute() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
+      // One-time fresh start wipe: clear local cache & active session
+      final hasCompletedFreshStart = prefs.getBool('fresh_start_v3') ?? false;
+      if (!hasCompletedFreshStart) {
+        await prefs.clear();
+        await prefs.setBool('fresh_start_v3', true);
+        try {
+          await Supabase.instance.client.auth.signOut();
+        } catch (_) {}
+        return '/onboarding';
+      }
+
       final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
 
       if (!hasSeenOnboarding) {
@@ -79,10 +92,13 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _resolveNavigation() async {
     // Run animation window & auth query concurrently for maximum launch speed
-    final minDisplayFuture = Future.delayed(const Duration(milliseconds: 1400));
-    final routeFuture = _determineNextRoute();
+    final completer = Completer<void>();
+    _displayTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!completer.isCompleted) completer.complete();
+    });
 
-    final results = await Future.wait([minDisplayFuture, routeFuture]);
+    final routeFuture = _determineNextRoute();
+    final results = await Future.wait([completer.future, routeFuture]);
     if (!mounted || _navigated) return;
     _navigated = true;
 
@@ -92,6 +108,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _displayTimer?.cancel();
     _introController.dispose();
     super.dispose();
   }

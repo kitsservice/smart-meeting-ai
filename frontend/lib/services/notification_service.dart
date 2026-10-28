@@ -1,7 +1,8 @@
+import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'dart:math';
 
 class LocalNotificationService {
   static final LocalNotificationService _instance =
@@ -11,6 +12,10 @@ class LocalNotificationService {
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+
+  static const String musicalChannelId = 'meeting_musical_alerts_v1';
+  static const String musicalChannelName = 'Meeting Music Alerts (5-Min Reminder)';
+  static const String musicalSoundName = 'meeting_chime';
 
   Future<void> init() async {
     tz.initializeTimeZones();
@@ -33,17 +38,59 @@ class LocalNotificationService {
 
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
-    // Request permission for newer Android versions
-    await flutterLocalNotificationsPlugin
+    // Explicitly register the high-priority musical notification channel on Android
+    final Int64List vibrationPattern = Int64List.fromList([0, 500, 200, 500, 200, 800]);
+    final AndroidNotificationChannel musicalChannel = AndroidNotificationChannel(
+      musicalChannelId,
+      musicalChannelName,
+      description: 'Plays melodic chime music 5 minutes before scheduled meetings',
+      importance: Importance.max,
+      sound: const RawResourceAndroidNotificationSound(musicalSoundName),
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: vibrationPattern,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+    );
+
+    final androidPlugin = flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.requestNotificationsPermission();
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.requestExactAlarmsPermission();
+        >();
+
+    await androidPlugin?.createNotificationChannel(musicalChannel);
+
+    // Request permissions for Android 13+ (POST_NOTIFICATIONS and exact alarms)
+    await androidPlugin?.requestNotificationsPermission();
+    await androidPlugin?.requestExactAlarmsPermission();
+  }
+
+  /// Builds high-priority platform specifics that play the custom meeting chime sound
+  NotificationDetails _buildMusicalChimeNotificationDetails() {
+    final Int64List vibrationPattern = Int64List.fromList([0, 500, 200, 500, 200, 800]);
+
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        musicalChannelId,
+        musicalChannelName,
+        channelDescription:
+            'Plays melodic chime music 5 minutes before scheduled meetings',
+        importance: Importance.max,
+        priority: Priority.max,
+        sound: const RawResourceAndroidNotificationSound(musicalSoundName),
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: vibrationPattern,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        category: AndroidNotificationCategory.alarm,
+      ),
+      iOS: const DarwinNotificationDetails(
+        sound: '$musicalSoundName.wav',
+        presentSound: true,
+        presentAlert: true,
+        presentBanner: true,
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      ),
+    );
   }
 
   Future<void> scheduleMeetingNotifications(
@@ -72,7 +119,6 @@ class LocalNotificationService {
       0, // 8:00 AM
     );
 
-    // Only schedule if 8:00 AM hasn't passed yet
     if (morningTime.isAfter(DateTime.now())) {
       final hourStr = meetingDate.hour > 12
           ? meetingDate.hour - 12
@@ -98,7 +144,6 @@ class LocalNotificationService {
       const Duration(minutes: 30),
     );
 
-    // Only schedule if the 30-min warning hasn't passed yet
     if (thirtyMinsBefore.isAfter(DateTime.now())) {
       await flutterLocalNotificationsPlugin.zonedSchedule(
         baseId + 2,
@@ -111,6 +156,47 @@ class LocalNotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
       );
     }
+
+    // 3. Schedule 5-Minute Warning WITH Custom Notification Music / Chime
+    final DateTime fiveMinsBefore = meetingDate.subtract(
+      const Duration(minutes: 5),
+    );
+
+    final musicalDetails = _buildMusicalChimeNotificationDetails();
+
+    if (fiveMinsBefore.isAfter(DateTime.now())) {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        baseId + 3,
+        '🔔 Meeting in 5 minutes!',
+        'Your meeting "$title" is starting in 5 minutes. Get ready!',
+        tz.TZDateTime.from(fiveMinsBefore, tz.local),
+        musicalDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } else if (meetingDate.isAfter(DateTime.now())) {
+      // If the meeting was scheduled less than 5 minutes from now, alert immediately!
+      await flutterLocalNotificationsPlugin.show(
+        baseId + 3,
+        '🔔 Meeting Starting Soon!',
+        'Your meeting "$title" is starting shortly.',
+        musicalDetails,
+      );
+    }
+  }
+
+  /// Instantly test-plays the 5-minute melodic chime notification
+  Future<void> testPlayMeetingChimeNotification({
+    String title = 'Demo Meeting Preview',
+  }) async {
+    final musicalDetails = _buildMusicalChimeNotificationDetails();
+    await flutterLocalNotificationsPlugin.show(
+      Random().nextInt(10000),
+      '🔔 Meeting in 5 minutes!',
+      'Your meeting "$title" is starting in 5 minutes.',
+      musicalDetails,
+    );
   }
 
   /// Schedule a targeted notification reminder for an action item / task deadline

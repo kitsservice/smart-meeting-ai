@@ -6,6 +6,7 @@ import '../providers/meetings_provider.dart';
 import '../services/api_service.dart';
 import '../services/offline_queue.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shimmer_loading.dart';
 
 class MeetingsListScreen extends ConsumerStatefulWidget {
   const MeetingsListScreen({super.key});
@@ -223,11 +224,7 @@ class _MeetingsListScreenState extends ConsumerState<MeetingsListScreen> {
 
           Expanded(
             child: isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                    ),
-                  )
+                ? const MeetingListSkeleton()
                 : _isSemanticSearch
                 ? _buildSemanticList()
                 : filteredMeetings.isEmpty

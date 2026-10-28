@@ -45,11 +45,13 @@ class OfflineQueueService {
   Future<void> queueMeeting(
     String title,
     String description,
-    String filePath,
-  ) async {
+    String filePath, {
+    String? language,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final queueJson = prefs.getStringList(_queueKey) ?? [];
     final currentUserId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final lang = language ?? prefs.getString('setting_lang_priority') ?? 'Auto-Detect';
 
     // Add new pending meeting with explicit user ownership
     queueJson.add(
@@ -58,6 +60,7 @@ class OfflineQueueService {
         'description': description,
         'filePath': filePath,
         'userId': currentUserId,
+        'language': lang,
         'timestamp': DateTime.now().toIso8601String(),
       }),
     );
@@ -127,7 +130,11 @@ class OfflineQueueService {
           // 2. Upload audio
           if (meetingId != null) {
             final bool uploadSuccess =
-                await _apiService.processAudio(meetingId, filePath);
+                await _apiService.processAudio(
+                  meetingId,
+                  filePath,
+                  language: data['language'] as String?,
+                );
 
             if (uploadSuccess) {
               debugPrint('Successfully synced offline meeting: ${data['title']}');

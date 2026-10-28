@@ -27,8 +27,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _autoDeleteAudio = prefs.getBool('setting_auto_delete') ?? false;
       _summaryStyle =
           prefs.getString('setting_summary_style') ?? 'Executive Summary';
-      _languagePriority =
-          prefs.getString('setting_lang_priority') ?? 'Auto-Detect';
+      final savedLang = prefs.getString('setting_lang_priority') ?? 'Auto-Detect';
+      const validLangs = [
+        'Auto-Detect',
+        'Marathi (मराठी)',
+        'Hindi Only',
+        'Hinglish (Code-Mixed)',
+        'English Only',
+      ];
+      _languagePriority = validLangs.contains(savedLang) ? savedLang : 'Auto-Detect';
     });
   }
 
@@ -179,9 +186,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     items:
                         [
                               'Auto-Detect',
-                              'English Only',
+                              'Marathi (मराठी)',
                               'Hindi Only',
                               'Hinglish (Code-Mixed)',
+                              'English Only',
                             ]
                             .map(
                               (lang) => DropdownMenuItem(
