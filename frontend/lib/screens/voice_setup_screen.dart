@@ -424,8 +424,8 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
 
   Widget _buildStepIndicator() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -467,28 +467,29 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     }
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 20,
+          height: 20,
           decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
           alignment: Alignment.center,
           child: isDone
-              ? const Icon(Icons.check, size: 14, color: Colors.white)
+              ? const Icon(Icons.check, size: 12, color: Colors.white)
               : Text(
                   '$step',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.bold,
                     color: fg,
                   ),
                 ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 3),
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
             color: isCurrent ? AppTheme.primaryColor : const Color(0xFF64748B),
           ),
@@ -502,7 +503,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     return Expanded(
       child: Container(
         height: 2,
-        margin: const EdgeInsets.symmetric(horizontal: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
         color: isDone ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
       ),
     );
@@ -572,7 +573,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
   Widget _buildQualityFeedbackBadge() {
     if (!_isRecording && !_hasRecordedCurrentStep) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(20),
@@ -581,14 +582,17 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.mic_none_rounded, size: 16, color: Color(0xFF64748B)),
-            const SizedBox(width: 6),
-            Text(
-              'Sample $_currentStep of 3: Tap mic to speak phrase',
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF64748B),
+            const Icon(Icons.mic_none_rounded, size: 15, color: Color(0xFF64748B)),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                'Sample $_currentStep of 3: Tap mic to speak',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF64748B),
+                ),
               ),
             ),
           ],
