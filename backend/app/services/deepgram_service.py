@@ -14,6 +14,10 @@ RE_ASSIGNEE = re.compile(r"^([A-Z][a-zA-Z0-9_\s]+?)(?::|,|\s+please)")
 ACTION_PATTERNS = [
     re.compile(r"(?:please|need to|must|should|ensure|make sure to)\s+([^.!?\n]+)", re.IGNORECASE),
     re.compile(r"(?:will|going to)\s+([^.!?\n]+)", re.IGNORECASE),
+    # Hindi actionable phrases
+    re.compile(r"([^.!?\n।]+?(?:करना है|करना पड़ेगा|कर देना|भेज देना|तैयार करना|अपडेट करना|फाइनल करना))"),
+    # Marathi actionable phrases
+    re.compile(r"([^.!?\n।]+?(?:करायचं आहे|करावे लागेल|पाठवून दे|तयार करा|पूर्ण करा|बघून घ्या|उरका|फायनल करा))"),
 ]
 
 
@@ -667,9 +671,25 @@ USER'S QUESTION:
         if len(summary_preview) > 300:
             summary_preview = summary_preview[:300] + "..."
 
+        action_items = []
+        seen_tasks = set()
+        for line in lines:
+            speaker = line.split(":")[0].strip() if ":" in line else None
+            content = line.split(":", 1)[1].strip() if ":" in line else line
+            for pat in ACTION_PATTERNS:
+                for m in pat.finditer(content):
+                    raw_task = m.group(0).strip().capitalize()
+                    if len(raw_task) > 8 and raw_task.lower() not in seen_tasks:
+                        seen_tasks.add(raw_task.lower())
+                        action_items.append({"task": raw_task, "assignee": speaker})
+                        if len(action_items) >= 5:
+                            break
+                if len(action_items) >= 5:
+                    break
+
         return {
             "summary": summary_preview,
-            "action_items": [],
+            "action_items": action_items,
         }
 
     async def generate_summary(

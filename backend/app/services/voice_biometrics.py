@@ -314,8 +314,9 @@ class VoiceBiometricsService:
                     continue
 
                 matched_user = valid_users[u_idx]
+                raw_name = matched_user.get("full_name") or matched_user.get("name")
                 display_name = format_speaker_display_name(
-                    matched_user.get("full_name"), matched_user.get("email")
+                    raw_name, matched_user.get("email")
                 )
                 speaker_name_map[spk_id] = display_name
                 assigned_speakers.add(spk_id)
