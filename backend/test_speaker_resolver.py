@@ -178,14 +178,21 @@ Recorded note"""
     single_host_att = [{"id": "u1", "name": "Arjun Sharma", "is_host": True}]
     multi_voice_segments = [
         {"speaker_id": 0, "start": 0.0, "end": 4.0, "text": "I am hosting this meeting."},
-        {"speaker_id": 1, "start": 4.5, "end": 8.0, "text": "I am speaking from the other side of the room."},
+        {
+            "speaker_id": 1,
+            "start": 4.5,
+            "end": 8.0,
+            "text": "I am speaking from the other side of the room.",
+        },
     ]
     res_multi = resolve_speaker_names_deterministic(
         segments=multi_voice_segments, attendees=single_host_att
     )
     assert res_multi[0] == "Arjun Sharma", f"Expected 'Arjun Sharma', got {res_multi.get(0)}"
     assert res_multi[1] == "Guest 1", f"Expected 'Guest 1', got {res_multi.get(1)}"
-    print("[PASS] Multi-voice audio in single-attendee room correctly preserves distinct identities!")
+    print(
+        "[PASS] Multi-voice audio in single-attendee room correctly preserves distinct identities!"
+    )
 
     print("--- 11. Testing Conversational Turn Splitting for Multi-Attendee Meeting ---")
     from app.api.endpoints.meetings import _text_to_timed_segments
@@ -203,7 +210,10 @@ Recorded note"""
     assert res_conv[1] == "Kits", f"Expected Kits, got {res_conv.get(1)}"
     distinct_speakers_in_segs = {s["speaker_id"] for s in conv_segs}
     assert 0 in distinct_speakers_in_segs and 1 in distinct_speakers_in_segs
-    print("[PASS] Conversational turn splitting verified: both attendees properly separated and attributed!")
+    print(
+        "[PASS] Conversational turn splitting verified: "
+        "both attendees properly separated and attributed!"
+    )
 
     print("\n=======================================================")
     print("ALL 11 SPEAKER IDENTIFICATION TESTS PASSED SUCCESSFULLY!")

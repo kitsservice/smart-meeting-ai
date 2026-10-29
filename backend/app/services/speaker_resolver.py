@@ -248,40 +248,45 @@ async def contextual_speaker_attribution_gemini(
         'Example format: {"0": "Arjun Sharma", "1": "Priya Patil"}'
     )
 
-    try:
-        def call_gemini():
-            return gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                ),
-            )
+    for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
+        try:
+            def call_gemini(m=model_name):
+                return gemini_client.models.generate_content(
+                    model=m,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                    ),
+                )
 
-        response = await run_in_threadpool(call_gemini)
-        raw_text = clean_json_markdown(response.text or "")
+            response = await run_in_threadpool(call_gemini)
+            raw_text = clean_json_markdown(response.text or "")
 
-        parsed = json.loads(raw_text)
-        if isinstance(parsed, dict):
-            resolved: dict[int, str] = {}
-            valid_names = {a["name"].lower(): a["name"] for a in available_attendees}
-            for sid_str, name in parsed.items():
-                try:
-                    sid = int(sid_str)
-                    if sid in unassigned_spk_ids and isinstance(name, str):
-                        match_proper = valid_names.get(name.lower().strip())
-                        if match_proper:
-                            resolved[sid] = match_proper
-                            logger.info(
-                                "Gemini AI contextual attribution: Speaker %d -> '%s'",
-                                sid,
-                                match_proper,
-                            )
-                except ValueError:
-                    continue
-            return resolved
-    except Exception as e:
-        logger.warning(f"Contextual speaker attribution via Gemini error: {e}")
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, dict):
+                resolved: dict[int, str] = {}
+                valid_names = {a["name"].lower(): a["name"] for a in available_attendees}
+                for sid_str, name in parsed.items():
+                    try:
+                        sid = int(sid_str)
+                        if sid in unassigned_spk_ids and isinstance(name, str):
+                            match_proper = valid_names.get(name.lower().strip())
+                            if match_proper:
+                                resolved[sid] = match_proper
+                                logger.info(
+                                    "Gemini AI contextual attribution: Speaker %d -> '%s'",
+                                    sid,
+                                    match_proper,
+                                )
+                    except ValueError:
+                        continue
+                if resolved:
+                    return resolved
+        except Exception as e:
+            err_s = str(e)
+            logger.warning(f"Contextual speaker attribution via Gemini ({model_name}) error: {e}")
+            if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
+                break
 
     return {}
 

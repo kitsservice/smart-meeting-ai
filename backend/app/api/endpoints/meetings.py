@@ -551,7 +551,9 @@ async def _process_and_save_audio(
                             audio_bytes, language="mr"
                         )
                         if segments:
-                            logger.info("Deepgram Marathi succeeded with %d segments", len(segments))
+                            logger.info(
+                                "Deepgram Marathi succeeded with %d segments", len(segments)
+                            )
                     except Exception as dg_err:
                         logger.warning(f"Deepgram Marathi error: {dg_err}")
 
@@ -562,7 +564,9 @@ async def _process_and_save_audio(
                             audio_bytes, filename=filename, language_code="mr-IN"
                         )
                         if s_text and not s_text.startswith("Error") and len(s_text.strip()) > 3:
-                            segments = _text_to_timed_segments(s_text, audio_dur, num_attendees=num_att)
+                            segments = _text_to_timed_segments(
+                                s_text, audio_dur, num_attendees=num_att
+                            )
                             logger.info(
                                 "Sarvam AI Marathi transcription succeeded: %s (%d segments)",
                                 s_text[:60],
@@ -593,7 +597,9 @@ async def _process_and_save_audio(
                             audio_bytes, language="hi"
                         )
                         if segments:
-                            logger.info("Deepgram Hinglish succeeded with %d segments", len(segments))
+                            logger.info(
+                                "Deepgram Hinglish succeeded with %d segments", len(segments)
+                            )
                     except Exception as dg_err:
                         logger.warning(f"Deepgram Hinglish error: {dg_err}")
 
@@ -604,7 +610,9 @@ async def _process_and_save_audio(
                             audio_bytes, filename=filename, language_code="hi-IN"
                         )
                         if s_text and not s_text.startswith("Error") and len(s_text.strip()) > 3:
-                            segments = _text_to_timed_segments(s_text, audio_dur, num_attendees=num_att)
+                            segments = _text_to_timed_segments(
+                                s_text, audio_dur, num_attendees=num_att
+                            )
                     except Exception as s_err:
                         logger.warning(f"Sarvam Hinglish error: {s_err}")
 
@@ -643,11 +651,11 @@ async def _process_and_save_audio(
                             audio_bytes, filename=filename, language_code="hi-IN"
                         )
                         if s_text and not s_text.startswith("Error") and len(s_text.strip()) > 3:
-                            segments = _text_to_timed_segments(s_text, audio_dur, num_attendees=num_att)
+                            segments = _text_to_timed_segments(
+                                s_text, audio_dur, num_attendees=num_att
+                            )
                     except Exception as s_err:
                         logger.warning(f"Sarvam Hindi fallback error: {s_err}")
-                    except Exception as dg_err:
-                        logger.warning(f"Deepgram Hindi error: {dg_err}")
 
             else:
                 # 2. General Auto-Detect Pipeline

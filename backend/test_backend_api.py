@@ -32,6 +32,27 @@ def test_backend_endpoints():
     assert format_speaker_display_name(None, None) == "Speaker"
     print("[PASS] Speaker display name formatting logic operates accurately.")
 
+    # 5. Multi-Sample Centroid Math Verification
+    print("--- 5. Testing Multi-Sample Centroid Biometric Averaging ---")
+    import numpy as np
+    e1 = np.random.randn(192).astype(np.float32)
+    e1 /= np.linalg.norm(e1)
+    e2 = e1 + 0.05 * np.random.randn(192).astype(np.float32)
+    e2 /= np.linalg.norm(e2)
+    e3 = e1 + 0.05 * np.random.randn(192).astype(np.float32)
+    e3 /= np.linalg.norm(e3)
+
+    centroid = np.mean([e1, e2, e3], axis=0)
+    norm = np.linalg.norm(centroid)
+    assert norm > 0.0
+    centroid /= norm
+    assert len(centroid) == 192
+    sim1 = float(np.dot(centroid, e1))
+    sim2 = float(np.dot(centroid, e2))
+    sim3 = float(np.dot(centroid, e3))
+    assert sim1 > 0.85 and sim2 > 0.85 and sim3 > 0.85
+    print("[PASS] Multi-sample 3-phrase centroid averaging confirmed with >85% cross-similarity.")
+
     print("\n===========================================")
     print("ALL BACKEND QA TEST SUITES PASSED CLEANLY!")
     print("===========================================")

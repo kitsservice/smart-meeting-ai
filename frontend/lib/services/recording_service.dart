@@ -47,13 +47,13 @@ class MeetingRecordingService extends ChangeNotifier {
   double _currentAmplitude = 0.0;
   double get currentAmplitude => _currentAmplitude;
 
-  final List<double> _waveformSamples = List.filled(28, 0.06);
+  final List<double> _waveformSamples = List.filled(28, 0.06, growable: true);
   List<double> get waveformSamples => List.unmodifiable(_waveformSamples);
 
   /// High-frequency notifiers for real-time waveform visualizers without triggering
   /// full-screen rebuilds on the parent widget tree.
   final ValueNotifier<List<double>> waveformNotifier =
-      ValueNotifier<List<double>>(List.filled(28, 0.06));
+      ValueNotifier<List<double>>(List.filled(28, 0.06, growable: true));
   final ValueNotifier<double> amplitudeNotifier = ValueNotifier<double>(0.0);
 
   bool get hasSession => _hasStarted || _isRecording;

@@ -28,6 +28,7 @@ HINDI_SLANG_KEYTERMS: list[str] = [
 
 def chunk_audio_if_needed(audio_bytes: bytes, max_chunk_sec: float = 25.0) -> list[bytes]:
     """Slices audio into chunks under 25 seconds for Sarvam synchronous REST STT limit."""
+    inp = None
     try:
         inp = av.open(io.BytesIO(audio_bytes))
         in_stream = inp.streams.audio[0]
@@ -75,6 +76,12 @@ def chunk_audio_if_needed(audio_bytes: bytes, max_chunk_sec: float = 25.0) -> li
     except Exception as e:
         logger.warning(f"Audio chunking skipped due to error: {e}")
         return [audio_bytes]
+    finally:
+        if inp is not None:
+            try:
+                inp.close()
+            except Exception:
+                pass
 
 
 class SarvamAIService:

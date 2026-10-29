@@ -38,6 +38,7 @@ class DeepgramAIService:
     def __init__(self):
         self._client: httpx.AsyncClient | None = None
         self._gemini_client = None
+        self._gemini_disabled = False
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -66,6 +67,8 @@ class DeepgramAIService:
             return await self.client.post(url, **kwargs)
 
     def _get_gemini_client(self):
+        if getattr(self, "_gemini_disabled", False):
+            return None
         if self._gemini_client is None and settings.GEMINI_API_KEY:
             try:
                 from google import genai
@@ -261,7 +264,7 @@ class DeepgramAIService:
             "and no markdown commentary."
         )
 
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
             try:
                 def call_gemini(target_model=model_name):
                     return client.models.generate_content(
@@ -278,7 +281,11 @@ class DeepgramAIService:
                     logger.info(f"Gemini ({model_name}) audio transcription succeeded: {text[:60]}")
                     return text
             except Exception as e:
+                err_s = str(e)
                 logger.warning(f"Gemini audio transcription ({model_name}) error: {e}")
+                if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
+                    self._gemini_disabled = True
+                    break
         return ""
 
     async def transcribe_with_gemini_segments(
@@ -377,7 +384,7 @@ class DeepgramAIService:
             "Return only raw JSON without markdown code fences."
         )
 
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
             try:
                 def call_gemini(target_model=model_name):
                     return client.models.generate_content(
@@ -404,7 +411,11 @@ class DeepgramAIService:
                         )
                         return parsed
             except Exception as e:
+                err_s = str(e)
                 logger.warning("Gemini segment transcription (%s) error: %s", model_name, e)
+                if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
+                    self._gemini_disabled = True
+                    break
 
         # Fallback to plain Gemini text transcription if JSON structuring failed
         plain_text = await self.transcribe_with_gemini(audio_bytes, mime_type=mime_type)
@@ -482,7 +493,7 @@ Return the result EXACTLY in this JSON format without markdown wrapping:
 """
         last_error = None
         # Candidate active models in Google Gemini API
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
             try:
 
                 def call_gemini(target_model=model_name):
@@ -513,7 +524,8 @@ Return the result EXACTLY in this JSON format without markdown wrapping:
                 last_error = e
                 err_str = str(e)
                 logger.warning(f"Gemini {model_name} failed: {e}. Trying next candidate...")
-                if "PERMISSION_DENIED" in err_str or "denied access" in err_str:
+                if "PERMISSION_DENIED" in err_str or "denied access" in err_str or "free tier" in err_str:
+                    self._gemini_disabled = True
                     break
                 continue
 
@@ -545,7 +557,7 @@ CONTEXT FROM USER'S MEETINGS:
 USER'S QUESTION:
 {question}
 """
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
             try:
                 def call_gemini(target_model=model_name):
                     return client.models.generate_content(
@@ -557,7 +569,11 @@ USER'S QUESTION:
                 if response.text and response.text.strip():
                     return response.text.strip()
             except Exception as e:
+                err_s = str(e)
                 logger.warning(f"Gemini ask_ares ({model_name}) error: {e}")
+                if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
+                    self._gemini_disabled = True
+                    break
 
         return (
             "I reviewed your meetings, but I was unable to generate an answer right now. "

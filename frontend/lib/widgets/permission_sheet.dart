@@ -131,7 +131,8 @@ class PermissionSheet extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -283,6 +284,7 @@ class PermissionSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

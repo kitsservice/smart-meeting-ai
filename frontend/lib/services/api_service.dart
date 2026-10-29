@@ -592,6 +592,109 @@ class ApiService {
     return false;
   }
 
+  Future<bool> enrollVoiceMulti(
+    List<String> filePaths, {
+    String? fullNameOverride,
+  }) async {
+    final userId = _currentUserId ?? '';
+    String fullName = fullNameOverride ?? '';
+    if (fullName.isEmpty) {
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        fullName = user?.userMetadata?['full_name'] ??
+            user?.userMetadata?['name'] ??
+            '';
+        if (fullName.isEmpty && user?.email != null) {
+          fullName = user!.email!.split('@')[0];
+        }
+      } catch (_) {}
+    }
+    if (userId.isEmpty || filePaths.isEmpty) {
+      debugPrint('Error enrolling multi-sample voice: user not authenticated or files empty');
+      return false;
+    }
+
+    for (final base in candidateBaseUrls) {
+      final url = Uri.parse(
+        '$base/users/enroll-voice-multi?user_id=$userId&full_name=${Uri.encodeComponent(fullName)}',
+      );
+
+      try {
+        if (_cachedBaseUrl != base && _isLocalAddress(base)) {
+          final isAlive = await _isBaseUrlAlive(base);
+          if (!isAlive) continue;
+        }
+
+        debugPrint('Attempting multi-sample voice enrollment at: $url (${filePaths.length} samples)');
+        var request = http.MultipartRequest('POST', url);
+        request.headers.addAll(_getHeaders(isMultipart: true));
+
+        for (final p in filePaths) {
+          request.files.add(await http.MultipartFile.fromPath('files', p));
+        }
+
+        final streamedResponse = await _client
+            .send(request)
+            .timeout(const Duration(seconds: 75));
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode == 200) {
+          debugPrint('Multi-sample voice enrolled successfully on $base!');
+          _cachedBaseUrl = base;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('cached_api_base_url', base);
+          } catch (_) {}
+          return true;
+        } else {
+          debugPrint('Failed to enroll multi-sample voice on $base (${response.statusCode}): ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('Error in multi-sample enrollment on $base: $e');
+      }
+    }
+    // Fallback to single enrollment of last sample if multi-sample endpoint unavailable
+    if (filePaths.isNotEmpty) {
+      return enrollVoice(filePaths.last, fullNameOverride: fullNameOverride);
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>?> verifyVoice(String filePath) async {
+    final userId = _currentUserId ?? '';
+    if (userId.isEmpty) return null;
+
+    for (final base in candidateBaseUrls) {
+      final url = Uri.parse('$base/users/verify-voice?user_id=$userId');
+
+      try {
+        if (_cachedBaseUrl != base && _isLocalAddress(base)) {
+          final isAlive = await _isBaseUrlAlive(base);
+          if (!isAlive) continue;
+        }
+
+        var request = http.MultipartRequest('POST', url);
+        request.headers.addAll(_getHeaders(isMultipart: true));
+        request.files.add(await http.MultipartFile.fromPath('file', filePath));
+
+        final streamedResponse = await _client
+            .send(request)
+            .timeout(const Duration(seconds: 45));
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data is Map<String, dynamic>) {
+            return data;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error testing voice match on $base: $e');
+      }
+    }
+    return null;
+  }
+
   Future<bool> updateActionItemStatus(
     String meetingId,
     String actionItemId,
