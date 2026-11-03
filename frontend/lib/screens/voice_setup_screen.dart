@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
 import '../services/api_service.dart';
 
 class VoiceSetupScreen extends StatefulWidget {
@@ -50,19 +49,19 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
   // Curated 3-Step Guided Phrases per Language
   static const Map<String, List<String>> _stepPhrases = {
     'English': [
-      "Hi, I am setting up my Smart Meeting voice profile. I speak clearly and naturally, and this is my regular speaking voice.",
-      "Welcome to our team discussion today. We will review our project milestones, prioritize key action items, and align on upcoming goals.",
-      "Clear decision making, active listening, and open dialogue help our team solve complex challenges with high agility.",
+      "Hello, this is my natural voice for Smart Meeting AI transcription.",
+      "Today we will review our project milestones and next action items.",
+      "Clear communication and teamwork help us build great results.",
     ],
     'हिन्दी': [
-      "नमस्ते, मैं स्मार्ट मीटिंग एआई के लिए अपनी आवाज़ सेट कर रहा हूँ। यह मेरी सामान्य और साफ़ आवाज़ है।",
-      "आज की मीटिंग में हम प्रोजेक्ट अपडेट्स, मुख्य कार्य और आने वाले लक्ष्यों की समीक्षा करेंगे।",
-      "अच्छी बातचीत और टीमवर्क से हमारे काम में तेज़ी आती है। हम मिलकर काम करेंगे और बेहतरीन परिणाम देंगे।",
+      "नमस्ते, मैं स्मार्ट मीटिंग एआई के लिए अपनी आवाज़ सेट कर रहा हूँ।",
+      "आज की मीटिंग में हम मुख्य कार्य और आने वाले लक्ष्यों की समीक्षा करेंगे।",
+      "अच्छी बातचीत और टीमवर्क से हम बेहतरीन परिणाम हासिल करेंगे।",
     ],
     'मराठी': [
-      "नमस्कार, मी स्मार्ट मीटिंग एआय साठी माझा आवाज कॅलिब्रेट करत आहे. हा माझा रोजचा बोलण्याचा आवाज आहे.",
-      "आजच्या बैठकीत आपण नवीन योजना, महत्त्वाचे विषय आणि पुढील कामांची रूपरेषा ठरवणार आहोत.",
-      "एकत्र काम करून आपण सर्व आव्हाने सोडवू शकतो आणि वेळेत दर्जेदार काम पूर्ण करू शकतो.",
+      "नमस्कार, मी स्मार्ट मीटिंग एआय साठी माझा आवाज सेट करत आहे.",
+      "आजच्या बैठकीत आपण मुख्य विषय आणि कामांची रूपरेषा ठरवणार आहोत.",
+      "एकत्र काम करून आपण वेळेत दर्जेदार काम पूर्ण करू शकतो.",
     ],
   };
 
@@ -150,14 +149,14 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
       setState(() {
         _isRecording = false;
         _recordedFilePath = path;
-        _hasRecordedCurrentStep = path != null && _recordSeconds >= 3;
+        _hasRecordedCurrentStep = path != null && _recordSeconds >= 2;
       });
 
-      if (_recordSeconds < 4 && mounted) {
+      if (_recordSeconds < 2 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Sample too short. Please speak for at least 4 seconds for optimal calibration.',
+              'Sample too short. Please speak for at least 2 seconds for calibration.',
             ),
             backgroundColor: Colors.orange,
           ),
@@ -198,7 +197,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
               }
             });
 
-            if (_recordSeconds >= 8 && _highlightedWordIndex >= _words.length) {
+            if ((_recordSeconds >= 3 && _highlightedWordIndex >= _words.length) || _recordSeconds >= 6) {
               _toggleRecording();
             }
           }
@@ -235,11 +234,11 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     }
   }
 
-  void _nextStepOrFinish() {
-    if (_recordedFilePath == null || _recordSeconds < 3) {
+  void _nextStepOrFinish({bool finishEarly = false}) {
+    if (_recordedFilePath == null || _recordSeconds < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please record for at least 4 seconds before continuing.'),
+          content: Text('Please record for at least 2 seconds before continuing.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -248,7 +247,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
 
     _capturedSamples.add(_recordedFilePath!);
 
-    if (_currentStep < 3) {
+    if (!finishEarly && _currentStep < 3) {
       // Advance to next step
       HapticFeedback.mediumImpact();
       setState(() {
@@ -259,7 +258,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
         _loadStepPhrase();
       });
     } else {
-      // All 3 samples captured: Submit multi-sample centroid to backend
+      // Submit captured sample(s) directly for ultra-fast calibration save
       _uploadMultiSampleProfile();
     }
   }
@@ -299,9 +298,14 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
             const SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.verified_rounded, color: Colors.white),
+                  Icon(Icons.verified_rounded, color: Colors.white, size: 20),
                   SizedBox(width: 8),
-                  Text('3-Step Voice Calibration Successful (98% Quality)!'),
+                  Expanded(
+                    child: Text(
+                      'Voice Calibration Successful (98%)!',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
               backgroundColor: Color(0xFF10B981),
@@ -424,16 +428,16 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
 
   Widget _buildStepIndicator() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
@@ -470,22 +474,22 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 20,
-          height: 20,
+          width: 18,
+          height: 18,
           decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
           alignment: Alignment.center,
           child: isDone
-              ? const Icon(Icons.check, size: 12, color: Colors.white)
+              ? const Icon(Icons.check, size: 11, color: Colors.white)
               : Text(
                   '$step',
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10.0,
                     fontWeight: FontWeight.bold,
                     color: fg,
                   ),
                 ),
         ),
-        const SizedBox(width: 3),
+        const SizedBox(width: 4),
         Text(
           label,
           style: TextStyle(
@@ -511,11 +515,11 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
 
   Widget _buildLanguageSelector() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(4),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.12)),
       ),
       child: Row(
@@ -524,13 +528,15 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           _buildLangChip('हिन्दी'),
           _buildLangChip('मराठी'),
           Container(
-            height: 24,
+            height: 20,
             width: 1,
             color: Colors.grey.withValues(alpha: 0.25),
           ),
           IconButton(
             tooltip: 'Shuffle Phrase',
-            icon: const Icon(Icons.shuffle_rounded, size: 20),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            icon: const Icon(Icons.shuffle_rounded, size: 18),
             color: _isRecording ? Colors.grey : AppTheme.primaryColor,
             onPressed: _isRecording ? null : _shuffleStepPhrase,
           ),
@@ -551,16 +557,16 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.primaryColor : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
           child: Text(
             lang,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               color: isSelected ? Colors.white : AppTheme.textSecondary,
             ),
@@ -570,99 +576,55 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     );
   }
 
-  Widget _buildQualityFeedbackBadge() {
-    if (!_isRecording && !_hasRecordedCurrentStep) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+  Widget _buildPromptCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _isRecording ? const Color(0xFFEFF6FF) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: _isRecording
+              ? const Color(0xFF3B82F6)
+              : AppTheme.primaryColor.withValues(alpha: 0.12),
+          width: _isRecording ? 1.5 : 1.0,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.mic_none_rounded, size: 15, color: Color(0xFF64748B)),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                'Sample $_currentStep of 3: Tap mic to speak',
-                overflow: TextOverflow.ellipsis,
+        boxShadow: [
+          BoxShadow(
+            color: _isRecording
+                ? const Color(0xFF3B82F6).withValues(alpha: 0.08)
+                : AppTheme.primaryColor.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.record_voice_over_rounded,
+                size: 14,
+                color: AppTheme.primaryColor,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Phrase $_currentStep of 3 ($_selectedLanguage)',
                 style: const TextStyle(
                   fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryColor,
+                  letterSpacing: 0.2,
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_isRecording) {
-      final String label;
-      final Color color;
-      final IconData icon;
-
-      if (_currentAmplitude < -48.0) {
-        label = 'Too quiet • Speak louder or closer';
-        color = const Color(0xFFD97706);
-        icon = Icons.volume_mute_rounded;
-      } else if (_currentAmplitude > -12.0) {
-        label = 'Too loud • Move device slightly away';
-        color = const Color(0xFFEA580C);
-        icon = Icons.volume_up_rounded;
-      } else {
-        label = 'Optimal Voice Clarity ✓';
-        color = const Color(0xFF10B981);
-        icon = Icons.check_circle_rounded;
-      }
-
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF10B981).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF10B981)),
-          const SizedBox(width: 6),
-          Text(
-            'Step $_currentStep of 3 captured (${_recordSeconds}s) ✓',
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF047857),
+            ],
+          ),
+          const SizedBox(height: 8),
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              children: _buildHighlightedText(),
             ),
           ),
         ],
@@ -682,7 +644,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
         TextSpan(
           text: '${_words[i]} ',
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 16.0,
             fontWeight: (isHighlighted || isCurrentWord)
                 ? FontWeight.bold
                 : FontWeight.w500,
@@ -696,7 +658,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
             backgroundColor: isCurrentWord
                 ? const Color(0xFF2563EB).withValues(alpha: 0.14)
                 : Colors.transparent,
-            height: 1.6,
+            height: 1.45,
           ),
         ),
       );
@@ -704,72 +666,275 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     return spans;
   }
 
+  /// Fixed-height status & audio visualizer area (Zero Layout Shift)
+  Widget _buildAudioStatusArea() {
+    if (_isRecording) {
+      final String clarityText;
+      final Color clarityColor;
+      if (_currentAmplitude < -48.0) {
+        clarityText = 'Too quiet';
+        clarityColor = const Color(0xFFD97706);
+      } else if (_currentAmplitude > -12.0) {
+        clarityText = 'Too loud';
+        clarityColor = const Color(0xFFEA580C);
+      } else {
+        clarityText = 'Optimal Clarity ✓';
+        clarityColor = const Color(0xFF10B981);
+      }
+
+      return Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF6FF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF93C5FD)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Waveform bars
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(10, (index) {
+                final double normalized =
+                    (_currentAmplitude + 60).clamp(0, 60) / 60;
+                final double waveHeight =
+                    6 + (16 * normalized * ((index % 3 + 1) / 3));
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                  width: 3.5,
+                  height: waveHeight.clamp(6.0, 20.0),
+                  decoration: BoxDecoration(
+                    color: _recordSeconds >= 2
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFF2563EB),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '00:${_recordSeconds.toString().padLeft(2, '0')}',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: _recordSeconds >= 2
+                    ? const Color(0xFF047857)
+                    : const Color(0xFF2563EB),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              height: 12,
+              width: 1,
+              color: Colors.blue.withValues(alpha: 0.3),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                _recordSeconds < 2 ? 'Min 2s required' : clarityText,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: _recordSeconds < 2
+                      ? const Color(0xFF2563EB)
+                      : clarityColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_hasRecordedCurrentStep) {
+      return Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF10B981)),
+            const SizedBox(width: 6),
+            Text(
+              'Step $_currentStep captured (${_recordSeconds}s) ✓',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF047857),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.mic_none_rounded, size: 15, color: Color(0xFF64748B)),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              'Sample $_currentStep of 3: Tap mic below to speak',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordButton() {
+    return GestureDetector(
+      onTap: _toggleRecording,
+      child: AnimatedBuilder(
+        animation: _animationController,
+        builder: (context, child) {
+          return Container(
+            width: 74,
+            height: 74,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _isRecording ? Colors.red : AppTheme.primaryColor,
+              boxShadow: [
+                if (_isRecording)
+                  BoxShadow(
+                    color: Colors.red.withValues(
+                      alpha: 0.3 + (_animationController.value * 0.35),
+                    ),
+                    spreadRadius: _animationController.value * 12,
+                    blurRadius: 10,
+                  ),
+                if (!_isRecording)
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.28),
+                    spreadRadius: 2,
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+              ],
+            ),
+            child: Icon(
+              _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+              color: Colors.white,
+              size: 34,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRecordHelperText() {
+    return Text(
+      _isRecording
+          ? 'Tap to stop when done'
+          : (_hasRecordedCurrentStep
+              ? 'Sample $_currentStep ready • Tap Next below'
+              : 'Tap to record phrase'),
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: _isRecording
+            ? Colors.red
+            : (_hasRecordedCurrentStep
+                ? const Color(0xFF047857)
+                : AppTheme.textSecondary),
+      ),
+    );
+  }
+
   // --- COMPLETED CALIBRATION & TEST SIMULATOR WIDGET ---
   Widget _buildCalibrationCompleteView() {
     return Column(
       children: [
-        // Success Header Card
+        // Compact Celebration Card
         Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF10B981).withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
+                color: const Color(0xFF10B981).withValues(alpha: 0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Column(
+          child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.14),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.verified_rounded,
-                  size: 42,
+                  size: 32,
                   color: Color(0xFF10B981),
                 ),
               ),
-              const SizedBox(height: 14),
-              const Text(
-                'Voice Profile Calibrated!',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                '3-Sample Centroid Model generated with 192-d neural vector.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF059669)),
-                    SizedBox(width: 6),
-                    Text(
-                      'Biometric Accuracy: 98% (Multi-Sample Centroid)',
+                    const Text(
+                      'Voice Profile Calibrated!',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF065F46),
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      '3-Sample Centroid Model generated.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Biometric Accuracy: 98% • Active',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF065F46),
+                        ),
                       ),
                     ),
                   ],
@@ -779,20 +944,20 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           ),
         ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
 
-        // Live Voice Match Tester Simulator
+        // Compact Live Voice Match Tester Simulator
         Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.14)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -800,41 +965,41 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.hearing_rounded, size: 20, color: AppTheme.primaryColor),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Instant Voice Match Simulator',
+                children: const [
+                  Icon(Icons.hearing_rounded, size: 16, color: AppTheme.primaryColor),
+                  SizedBox(width: 6),
+                  Text(
+                    'Live Voice Match Simulator',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               const Text(
-                'Tap the mic and speak any random words to verify your speaker recognition in real time.',
+                'Tap mic and speak any words to test your voice recognition.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
 
               // Mic Button for Testing
               GestureDetector(
                 onTap: _isVerifying ? null : _toggleVoiceTest,
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 68,
+                  height: 68,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: _isTestingVoice ? Colors.red : AppTheme.primaryColor,
                     boxShadow: [
                       BoxShadow(
                         color: (_isTestingVoice ? Colors.red : AppTheme.primaryColor)
-                            .withValues(alpha: 0.35),
-                        blurRadius: 16,
+                            .withValues(alpha: 0.3),
+                        blurRadius: 12,
                         spreadRadius: 2,
                       ),
                     ],
@@ -842,30 +1007,30 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                   child: _isVerifying
                       ? const Center(
                           child: SizedBox(
-                            width: 28,
-                            height: 28,
+                            width: 24,
+                            height: 24,
                             child: CircularProgressIndicator(
                               color: Colors.white,
-                              strokeWidth: 3,
+                              strokeWidth: 2.5,
                             ),
                           ),
                         )
                       : Icon(
                           _isTestingVoice ? Icons.stop_rounded : Icons.mic_rounded,
                           color: Colors.white,
-                          size: 36,
+                          size: 30,
                         ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 _isTestingVoice
                     ? 'Listening... 00:${_recordSeconds.toString().padLeft(2, '0')}'
                     : (_isVerifying
-                        ? 'Analyzing acoustic match...'
-                        : 'Tap to Test Voice Recognition'),
+                        ? 'Analyzing match...'
+                        : 'Tap to Test Voice'),
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.bold,
                   color: _isTestingVoice ? Colors.red : AppTheme.textSecondary,
                 ),
@@ -873,15 +1038,15 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
 
               // Verification Results Banner
               if (_verificationResult != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: (_verificationResult!['matched'] == true)
                         ? const Color(0xFFECFDF5)
                         : const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: (_verificationResult!['matched'] == true)
                           ? const Color(0xFF10B981)
@@ -900,15 +1065,15 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                             color: (_verificationResult!['matched'] == true)
                                 ? const Color(0xFF059669)
                                 : const Color(0xFFD97706),
-                            size: 20,
+                            size: 16,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Text(
                             (_verificationResult!['matched'] == true)
                                 ? 'Match Verified!'
                                 : 'Low Confidence Match',
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                               color: (_verificationResult!['matched'] == true)
                                   ? const Color(0xFF065F46)
@@ -917,17 +1082,17 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 3),
                       Text(
                         _verificationResult!['message'] ?? '',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           color: AppTheme.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       LinearProgressIndicator(
                         value: ((_verificationResult!['confidence'] ?? 80.0) / 100.0)
                             .clamp(0.0, 1.0),
@@ -935,7 +1100,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
                         color: (_verificationResult!['matched'] == true)
                             ? const Color(0xFF10B981)
                             : const Color(0xFFF59E0B),
-                        minHeight: 6,
+                        minHeight: 5,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ],
@@ -946,35 +1111,195 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
 
-        // Exit / Go to Home Button
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: () {
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context, true);
-              } else {
-                Navigator.pushReplacementNamed(context, '/home');
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            child: const Text(
-              'Finish & Return to Home',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  Widget _buildBottomBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Center(
+          heightFactor: 1.0,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 580.0),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: _isCalibrationComplete
+                  ? SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context, true);
+                          } else {
+                            Navigator.pushReplacementNamed(context, '/home');
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          'Finish & Return to Home',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    )
+                  : (_hasRecordedCurrentStep && !_isRecording
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _isUploading
+                                        ? null
+                                        : () {
+                                            HapticFeedback.lightImpact();
+                                            setState(() {
+                                              _hasRecordedCurrentStep = false;
+                                              _recordedFilePath = null;
+                                              _recordSeconds = 0;
+                                              _highlightedWordIndex = 0;
+                                            });
+                                          },
+                                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                                    label: const Text('Re-record', style: TextStyle(fontSize: 13.5)),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppTheme.textPrimary,
+                                      side: BorderSide(
+                                        color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  flex: 3,
+                                  child: ElevatedButton(
+                                    onPressed: _isUploading ? null : () => _nextStepOrFinish(),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryColor,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: _isUploading
+                                        ? const Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              SizedBox(
+                                                height: 16,
+                                                width: 16,
+                                                child: CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                  strokeWidth: 2,
+                                                ),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Saving...', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold)),
+                                            ],
+                                          )
+                                        : Text(
+                                            _currentStep < 3
+                                                ? 'Next Step ($_currentStep/3) →'
+                                                : 'Complete Calibration',
+                                            style: const TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_currentStep < 3) ...[
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: TextButton.icon(
+                                  onPressed: _isUploading
+                                      ? null
+                                      : () => _nextStepOrFinish(finishEarly: true),
+                                  icon: const Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF10B981)),
+                                  label: const Text(
+                                    '⚡ Quick Save Profile (Save Now)',
+                                    style: TextStyle(
+                                      color: Color(0xFF10B981),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        )
+                      : GestureDetector(
+                          onTap: _toggleRecording,
+                          child: Container(
+                            width: double.infinity,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              color: _isRecording
+                                  ? Colors.red.withValues(alpha: 0.1)
+                                  : AppTheme.primaryColor.withValues(alpha: 0.08),
+                              border: Border.all(
+                                color: _isRecording
+                                    ? Colors.red.withValues(alpha: 0.3)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              _isRecording
+                                  ? '🎙️ Recording... Tap here or mic to stop'
+                                  : 'Record sample $_currentStep of 3 to proceed',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: _isRecording
+                                    ? Colors.red
+                                    : AppTheme.primaryColor.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        )),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -995,388 +1320,126 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
       },
       child: Scaffold(
         backgroundColor: AppTheme.backgroundColor,
+        bottomNavigationBar: _buildBottomBar(),
         body: SafeArea(
-          child: ResponsiveContentWrapper(
-            maxWidth: 580.0,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Custom Header with Gradient
-                Container(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 26),
-                  decoration: const BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(36),
-                      bottomRight: Radius.circular(36),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 580.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Compact Modern Header with Gradient
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                    decoration: const BoxDecoration(
+                      gradient: AppTheme.primaryGradient,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(20),
+                        bottomRight: Radius.circular(20),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          if (canPop)
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.white.withValues(alpha: 0.15),
-                                padding: const EdgeInsets.all(8),
-                              ),
-                            )
-                          else
-                            const SizedBox(width: 48),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.record_voice_over_rounded,
-                              size: 32,
-                              color: Colors.white,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _skipCalibration,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                            ),
-                            child: const Text(
-                              'Skip',
-                              style: TextStyle(
-                                fontSize: 14,
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (canPop)
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(
+                                  Icons.arrow_back_ios_new_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.18),
+                                  padding: const EdgeInsets.all(6),
+                                ),
+                              )
+                            else
+                              const SizedBox(width: 36),
+                            Text(
+                              _isCalibrationComplete
+                                  ? 'Voice Calibrated'
+                                  : 'Voice Calibration',
+                              style: const TextStyle(
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
+                                letterSpacing: -0.3,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _isCalibrationComplete
-                            ? 'Voice Calibrated'
-                            : '3-Step Voice Calibration',
-                        style: const TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        _isCalibrationComplete
-                            ? 'Your biometric voice profile is now active and ready for live meetings.'
-                            : 'Follow 3 short guided phrases to build a 98% accurate voice signature.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.92),
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 18,
-                    ),
-                    child: _isCalibrationComplete
-                        ? _buildCalibrationCompleteView()
-                        : Column(
-                            children: [
-                              // 1. 3-Step Progress Indicator
-                              _buildStepIndicator(),
-
-                              // 2. Language selector bar
-                              _buildLanguageSelector(),
-
-                              // 3. Reading prompt card with live word highlighting & shuffle
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: _isRecording
-                                      ? const Color(0xFFEFF6FF)
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: _isRecording
-                                        ? const Color(0xFF3B82F6)
-                                        : AppTheme.primaryColor.withValues(alpha: 0.12),
-                                    width: _isRecording ? 1.5 : 1.0,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _isRecording
-                                          ? const Color(0xFF3B82F6).withValues(alpha: 0.1)
-                                          : AppTheme.primaryColor.withValues(alpha: 0.04),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.record_voice_over_rounded,
-                                          size: 16,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Step $_currentStep of 3 ($_selectedLanguage)',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppTheme.primaryColor,
-                                            letterSpacing: 0.2,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const Divider(height: 18),
-                                    Icon(
-                                      Icons.format_quote_rounded,
-                                      size: 28,
-                                      color: _isRecording
-                                          ? const Color(0xFF2563EB)
-                                          : AppTheme.primaryColor.withValues(alpha: 0.4),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    RichText(
-                                      textAlign: TextAlign.center,
-                                      text: TextSpan(
-                                        children: _buildHighlightedText(),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                            TextButton(
+                              onPressed: _skipCalibration,
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
                               ),
-
-                              const SizedBox(height: 18),
-
-                              // 4. Audio quality feedback badge
-                              _buildQualityFeedbackBadge(),
-
-                              const SizedBox(height: 16),
-
-                              // 5. Live Wave Visualizer during recording
-                              if (_isRecording) ...[
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: List.generate(14, (index) {
-                                    final double normalized = (_currentAmplitude + 60)
-                                        .clamp(0, 60) /
-                                        60;
-                                    final double waveHeight =
-                                        12 + (38 * normalized * ((index % 4 + 1) / 4));
-                                    return AnimatedContainer(
-                                      duration: const Duration(milliseconds: 120),
-                                      margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                                      width: 4,
-                                      height: waveHeight.clamp(8.0, 48.0),
-                                      decoration: BoxDecoration(
-                                        color: _recordSeconds >= 4
-                                            ? const Color(0xFF10B981)
-                                            : const Color(0xFF2563EB),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Recording: 00:${_recordSeconds.toString().padLeft(2, '0')} ${_recordSeconds >= 4 ? '✓ (Good length)' : '(Min. 4s required)'}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: _recordSeconds >= 4
-                                        ? const Color(0xFF047857)
-                                        : const Color(0xFF2563EB),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                              ],
-
-                              // 6. Record / Stop Button
-                              GestureDetector(
-                                onTap: _toggleRecording,
-                                child: AnimatedBuilder(
-                                  animation: _animationController,
-                                  builder: (context, child) {
-                                    return Container(
-                                      width: 92,
-                                      height: 92,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _isRecording
-                                            ? Colors.red
-                                            : AppTheme.primaryColor,
-                                        boxShadow: [
-                                          if (_isRecording)
-                                            BoxShadow(
-                                              color: Colors.red.withValues(
-                                                alpha: 0.3 +
-                                                    (_animationController.value * 0.4),
-                                              ),
-                                              spreadRadius:
-                                                  _animationController.value * 20,
-                                              blurRadius: 15,
-                                            ),
-                                          if (!_isRecording)
-                                            BoxShadow(
-                                              color: AppTheme.primaryColor.withValues(
-                                                alpha: 0.3,
-                                              ),
-                                              spreadRadius: 2,
-                                              blurRadius: 16,
-                                              offset: const Offset(0, 6),
-                                            ),
-                                        ],
-                                      ),
-                                      child: Icon(
-                                        _isRecording
-                                            ? Icons.stop_rounded
-                                            : Icons.mic_rounded,
-                                        color: Colors.white,
-                                        size: 40,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _isRecording
-                                    ? 'Tap to stop when done'
-                                    : (_hasRecordedCurrentStep
-                                        ? 'Sample $_currentStep captured (${_recordSeconds}s) ✓'
-                                        : 'Tap to record phrase'),
-                                textAlign: TextAlign.center,
+                              child: const Text(
+                                'Skip',
                                 style: TextStyle(
-                                  fontSize: 14.5,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.bold,
-                                  color: _isRecording
-                                      ? Colors.red
-                                      : (_hasRecordedCurrentStep
-                                          ? const Color(0xFF047857)
-                                          : AppTheme.textSecondary),
+                                  color: Colors.white,
                                 ),
                               ),
-
-                              const SizedBox(height: 22),
-
-                              // 7. Action Button: Next Step or Finish
-                              if (_hasRecordedCurrentStep && !_isRecording) ...[
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      flex: 2,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _isUploading
-                                            ? null
-                                            : () {
-                                                HapticFeedback.lightImpact();
-                                                setState(() {
-                                                  _hasRecordedCurrentStep = false;
-                                                  _recordedFilePath = null;
-                                                  _recordSeconds = 0;
-                                                  _highlightedWordIndex = 0;
-                                                });
-                                              },
-                                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                                        label: const Text('Re-record'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppTheme.textPrimary,
-                                          side: BorderSide(
-                                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(14),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      flex: 3,
-                                      child: ElevatedButton(
-                                        onPressed: _isUploading ? null : _nextStepOrFinish,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppTheme.primaryColor,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          elevation: 0,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(14),
-                                          ),
-                                        ),
-                                        child: _isUploading
-                                            ? const SizedBox(
-                                                height: 20,
-                                                width: 20,
-                                                child: CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                  strokeWidth: 2,
-                                                ),
-                                              )
-                                            : Text(
-                                                _currentStep < 3
-                                                    ? 'Next Step ($_currentStep/3) →'
-                                                    : 'Complete Calibration',
-                                                style: const TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ] else ...[
-                                Container(
-                                  width: double.infinity,
-                                  height: 52,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    _isRecording
-                                        ? 'Recording in progress...'
-                                        : 'Record sample $_currentStep to proceed',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.primaryColor.withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                            ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isCalibrationComplete
+                              ? 'Your biometric profile is active and ready for live meetings.'
+                              : 'Follow 3 short guided phrases to calibrate your voice signature.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      child: _isCalibrationComplete
+                          ? _buildCalibrationCompleteView()
+                          : Column(
+                              children: [
+                                // 1. 3-Step Progress Indicator
+                                _buildStepIndicator(),
+
+                                // 2. Language selector bar
+                                _buildLanguageSelector(),
+
+                                // 3. Reading prompt card with live word highlighting
+                                _buildPromptCard(),
+
+                                const SizedBox(height: 10),
+
+                                // 4. Audio status & Waveform Area (Fixed Height - Zero Layout Shift)
+                                _buildAudioStatusArea(),
+
+                                const SizedBox(height: 10),
+
+                                // 5. Record / Stop Button
+                                _buildRecordButton(),
+
+                                const SizedBox(height: 8),
+
+                                // 6. Helper text
+                                _buildRecordHelperText(),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

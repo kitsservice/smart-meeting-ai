@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -98,7 +98,20 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (mounted && res.user != null) {
-          await _navigateAfterAuth(res.user!.id);
+          final u = res.user!;
+          try {
+            final uName = ApiService.sanitizeDisplayName(
+              u.userMetadata?['full_name'] ?? u.userMetadata?['name'],
+              u.email,
+              fallback: '',
+            );
+            await Supabase.instance.client.from('users').upsert({
+              'id': u.id,
+              'email': u.email,
+              if (uName.isNotEmpty) 'full_name': uName,
+            });
+          } catch (_) {}
+          await _navigateAfterAuth(u.id);
         }
       } else {
         final res = await Supabase.instance.client.auth.signUp(
@@ -240,14 +253,14 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               title: Text(
                 'Reset Password',
-                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Enter your email address and we will send you a link to reset your password.',
-                    style: GoogleFonts.inter(
+                    style: TextStyle(
                       color: const Color(0xFF64748B),
                       fontSize: 14,
                     ),
@@ -262,13 +275,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: TextField(
                       controller: resetEmailController,
                       keyboardType: TextInputType.emailAddress,
-                      style: GoogleFonts.inter(
+                      style: TextStyle(
                         color: const Color(0xFF0F172A),
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: InputDecoration(
                         hintText: 'Email Address',
-                        hintStyle: GoogleFonts.inter(
+                        hintStyle: TextStyle(
                           color: const Color(0xFF94A3B8),
                           fontWeight: FontWeight.w500,
                         ),
@@ -291,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () => Navigator.pop(dialogContext),
                   child: Text(
                     'Cancel',
-                    style: GoogleFonts.inter(color: const Color(0xFF64748B)),
+                    style: TextStyle(color: const Color(0xFF64748B)),
                   ),
                 ),
                 ElevatedButton(
@@ -349,7 +362,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         )
                       : Text(
                           'Send Link',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                 ),
               ],
@@ -407,7 +420,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // App Title
                   RichText(
                     text: TextSpan(
-                      style: GoogleFonts.inter(
+                      style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
@@ -429,7 +442,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Subtitle
                   Text(
                     'Connect  •  Collaborate  •  Get Things Done',
-                    style: GoogleFonts.inter(
+                    style: TextStyle(
                       fontSize: 13,
                       color: const Color(0xFF64748B),
                       fontWeight: FontWeight.w500,
@@ -458,7 +471,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Text(
                           _isLogin ? 'Welcome Back' : 'Create Account',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF0F172A),
@@ -469,7 +482,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           _isLogin
                               ? 'Sign in to your account to continue'
                               : 'Sign up for a new account',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(
                             fontSize: 14,
                             color: const Color(0xFF64748B),
                             fontWeight: FontWeight.w500,
@@ -490,13 +503,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: TextField(
                               controller: _nameController,
                               keyboardType: TextInputType.name,
-                              style: GoogleFonts.inter(
+                              style: TextStyle(
                                 color: const Color(0xFF0F172A),
                                 fontWeight: FontWeight.w500,
                               ),
                               decoration: InputDecoration(
                                 hintText: 'Full Name',
-                                hintStyle: GoogleFonts.inter(
+                                hintStyle: TextStyle(
                                   color: const Color(0xFF94A3B8),
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -525,13 +538,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: TextField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
-                            style: GoogleFonts.inter(
+                            style: TextStyle(
                               color: const Color(0xFF0F172A),
                               fontWeight: FontWeight.w500,
                             ),
                             decoration: InputDecoration(
                               hintText: 'Email Address',
-                              hintStyle: GoogleFonts.inter(
+                              hintStyle: TextStyle(
                                 color: const Color(0xFF94A3B8),
                                 fontWeight: FontWeight.w500,
                               ),
@@ -559,13 +572,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: TextField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
-                            style: GoogleFonts.inter(
+                            style: TextStyle(
                               color: const Color(0xFF0F172A),
                               fontWeight: FontWeight.w500,
                             ),
                             decoration: InputDecoration(
                               hintText: 'Password',
-                              hintStyle: GoogleFonts.inter(
+                              hintStyle: TextStyle(
                                 color: const Color(0xFF94A3B8),
                                 fontWeight: FontWeight.w500,
                               ),
@@ -604,7 +617,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               onTap: _showForgotPasswordDialog,
                               child: Text(
                                 'Forgot Password?',
-                                style: GoogleFonts.inter(
+                                style: TextStyle(
                                   fontSize: 13,
                                   color: const Color(0xFF2563EB),
                                   fontWeight: FontWeight.w600,
@@ -652,7 +665,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       const SizedBox(width: 8),
                                       Text(
                                         _isLogin ? 'Sign In' : 'Create Account',
-                                        style: GoogleFonts.inter(
+                                        style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -676,7 +689,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               child: Text(
                                 'OR',
-                                style: GoogleFonts.inter(
+                                style: TextStyle(
                                   color: const Color(0xFF94A3B8),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -712,7 +725,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 const SizedBox(width: 12),
                                 Text(
                                   'Continue with Google',
-                                  style: GoogleFonts.inter(
+                                  style: TextStyle(
                                     fontSize: 15,
                                     color: const Color(0xFF0F172A),
                                     fontWeight: FontWeight.w600,
@@ -736,7 +749,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         _isLogin
                             ? 'New to Smart Meeting? '
                             : 'Already have an account? ',
-                        style: GoogleFonts.inter(
+                        style: TextStyle(
                           fontSize: 14,
                           color: const Color(0xFF64748B),
                           fontWeight: FontWeight.w500,
@@ -752,7 +765,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                         child: Text(
                           _isLogin ? 'Sign Up' : 'Sign In',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(
                             fontSize: 14,
                             color: const Color(0xFF2563EB),
                             fontWeight: FontWeight.w600,

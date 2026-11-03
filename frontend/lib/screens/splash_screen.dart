@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -48,10 +49,10 @@ class _SplashScreenState extends State<SplashScreen>
       final prefs = await SharedPreferences.getInstance();
 
       // One-time fresh start wipe: clear local cache & active session
-      final hasCompletedFreshStart = prefs.getBool('fresh_start_v3') ?? false;
+      final hasCompletedFreshStart = prefs.getBool('fresh_start_v4') ?? false;
       if (!hasCompletedFreshStart) {
         await prefs.clear();
-        await prefs.setBool('fresh_start_v3', true);
+        await prefs.setBool('fresh_start_v4', true);
         try {
           await Supabase.instance.client.auth.signOut();
         } catch (_) {}
@@ -66,6 +67,21 @@ class _SplashScreenState extends State<SplashScreen>
 
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
+        try {
+          final u = session.user;
+          final uName = ApiService.sanitizeDisplayName(
+            u.userMetadata?['full_name'] ?? u.userMetadata?['name'],
+            u.email,
+            fallback: '',
+          );
+          if (uName.isNotEmpty) {
+            Supabase.instance.client.from('users').upsert({
+              'id': u.id,
+              'email': u.email,
+              'full_name': uName,
+            }).catchError((_) {});
+          }
+        } catch (_) {}
         try {
           final data = await Supabase.instance.client
               .from('users')

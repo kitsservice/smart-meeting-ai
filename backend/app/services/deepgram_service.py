@@ -17,7 +17,9 @@ ACTION_PATTERNS = [
     # Hindi actionable phrases
     re.compile(r"([^.!?\n।]+?(?:करना है|करना पड़ेगा|कर देना|भेज देना|तैयार करना|अपडेट करना|फाइनल करना))"),
     # Marathi actionable phrases
-    re.compile(r"([^.!?\n।]+?(?:करायचं आहे|करावे लागेल|पाठवून दे|तयार करा|पूर्ण करा|बघून घ्या|उरका|फायनल करा))"),
+    re.compile(
+        r"([^.!?\n।]+?(?:करायचं आहे|करावे लागेल|पाठवून दे|तयार करा|पूर्ण करा|बघून घ्या|उरका|फायनल करा))"
+    ),
 ]
 
 
@@ -99,7 +101,7 @@ class DeepgramAIService:
         elif audio_bytes.startswith(b"\xff\xf1") or audio_bytes.startswith(b"\xff\xf9"):
             content_type = "audio/aac"
         elif len(audio_bytes) > 8 and (b"ftyp" in audio_bytes[:16] or b"moov" in audio_bytes[:32]):
-            content_type = "audio/m4a"
+            content_type = "audio/mp4"
         elif audio_bytes.startswith(b"ID3") or audio_bytes.startswith(b"\xff\xfb"):
             content_type = "audio/mp3"
 
@@ -238,7 +240,7 @@ class DeepgramAIService:
     async def transcribe_with_gemini(
         self,
         audio_bytes: bytes,
-        mime_type: str = "audio/m4a",
+        mime_type: str = "audio/mp4",
         language: str | None = None,
     ) -> str:
         """High-accuracy multimodal speech transcription fallback via Gemini 2.0 Flash.
@@ -268,7 +270,7 @@ class DeepgramAIService:
             "and no markdown commentary."
         )
 
-        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]:
             try:
                 def call_gemini(target_model=model_name):
                     return client.models.generate_content(
@@ -295,7 +297,7 @@ class DeepgramAIService:
     async def transcribe_with_gemini_segments(
         self,
         audio_bytes: bytes,
-        mime_type: str = "audio/m4a",
+        mime_type: str = "audio/mp4",
         language: str | None = None,
         audio_duration: float | None = None,
         attendees: list[dict] | None = None,
@@ -388,7 +390,7 @@ class DeepgramAIService:
             "Return only raw JSON without markdown code fences."
         )
 
-        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]:
             try:
                 def call_gemini(target_model=model_name):
                     return client.models.generate_content(
@@ -497,7 +499,7 @@ Return the result EXACTLY in this JSON format without markdown wrapping:
 """
         last_error = None
         # Candidate active models in Google Gemini API
-        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]:
             try:
 
                 def call_gemini(target_model=model_name):
@@ -528,22 +530,99 @@ Return the result EXACTLY in this JSON format without markdown wrapping:
                 last_error = e
                 err_str = str(e)
                 logger.warning(f"Gemini {model_name} failed: {e}. Trying next candidate...")
-                if "PERMISSION_DENIED" in err_str or "denied access" in err_str or "free tier" in err_str:
+                is_perm_denied = (
+                    "PERMISSION_DENIED" in err_str
+                    or "denied access" in err_str
+                    or "free tier" in err_str
+                )
+                if is_perm_denied:
                     self._gemini_disabled = True
                     break
                 continue
 
         raise last_error or RuntimeError("Gemini generation failed for all candidate models")
 
-    async def ask_ares(self, question: str, context: str) -> str:
-        """Answers a user's question about their meetings using Gemini and meeting context."""
-        client = self._get_gemini_client()
-        if client is None:
+    def _extract_answer_from_context(self, question: str, context: str) -> str:
+        """Intelligently answers user questions from meeting context deterministically
+        when cloud LLM services are temporarily unavailable.
+        """
+        if not context or not context.strip():
             return (
-                "Ares AI requires a configured GEMINI_API_KEY to answer queries. "
-                "Please configure GEMINI_API_KEY in your backend environment."
+                "I reviewed your meeting history, but you don't have any recorded meetings yet. "
+                "Record or join a meeting to build your knowledge base, and I'll be ready to answer your questions!"
             )
 
+        lower_q = question.lower()
+
+        # 1. Action Items / Tasks Intent
+        if any(w in lower_q for w in ["action item", "action items", "task", "tasks", "todo", "assigned", "who is doing", "what to do", "supposed to"]):
+            items = []
+            in_action_section = False
+            for line in context.splitlines():
+                sline = line.strip()
+                if "Action Items:" in sline:
+                    in_action_section = True
+                    clean = sline.replace("Action Items:", "").strip()
+                    if clean and clean != "[]":
+                        items.append(clean)
+                    continue
+                elif any(sline.startswith(h) for h in ["Meeting:", "Date:", "Summary:", "Decisions:", "Transcript:"]):
+                    in_action_section = False
+
+                if in_action_section and (sline.startswith("-") or sline.startswith("*")):
+                    items.append(sline)
+                elif sline.startswith("- ") or sline.startswith("* "):
+                    if any(kw in sline.lower() for kw in ["will", "to ", "deploy", "review", "finalize", "finish", "test", "build", "verify", "update", "create"]):
+                        items.append(sline)
+
+            if items:
+                formatted = "\n".join(f"- {it.strip('- *')}" for it in items[:8])
+                return f"Here are the action items identified in your meeting records:\n\n{formatted}"
+
+        # 2. Key Decisions Intent
+        if any(w in lower_q for w in ["decision", "decide", "agreed", "finalized"]):
+            decisions = []
+            for line in context.splitlines():
+                if any(kw in line.lower() for kw in ["decid", "agreed", "finalized", "approved", "conclusion"]):
+                    decisions.append(line.strip("- *"))
+            if decisions:
+                formatted = "\n".join(f"- {d}" for d in decisions[:5])
+                return f"Here are the key decisions noted in your meetings:\n\n{formatted}"
+
+        # 3. People / Attendees / Who was there
+        if any(w in lower_q for w in ["who attended", "who was", "attendee", "participant", "member"]):
+            for line in context.splitlines():
+                if any(kw in line.lower() for kw in ["attendee", "participant", "member", "host"]):
+                    return f"Based on your meeting records:\n\n{line.strip()}"
+
+        # 4. Summary / Overview Intent
+        summaries = []
+        for line in context.splitlines():
+            if line.startswith("Summary:"):
+                clean = line.replace("Summary:", "").strip()
+                if clean and clean != "No speech was detected in this recording.":
+                    summaries.append(clean)
+
+        if summaries:
+            return "Here is what was discussed in your meetings:\n\n" + "\n\n".join(summaries[:3])
+
+        # 5. General Relevant Context Fallback
+        lines = [l.strip() for l in context.splitlines() if l.strip() and not l.startswith("---")]
+        if lines:
+            preview = "\n".join(f"- {l}" for l in lines[:4])
+            return f"Here is the relevant information found from your meetings:\n\n{preview}"
+
+        return (
+            "I reviewed your meetings, but I was unable to find specific details for your query. "
+            "Please try asking with more details."
+        )
+
+    async def ask_ares(self, question: str, context: str) -> str:
+        """Answers a user's question about their meetings using multi-tier AI:
+        Tier 1: Gemini (if configured and valid)
+        Tier 2: Sarvam 105B Conversations Foundation Model
+        Tier 3: Intelligent Deterministic Context Extractor
+        """
         prompt = f"""You are Ares, an intelligent executive meeting assistant.
 Your goal is to answer the user's question accurately, concisely, and helpfully based on
 their meeting records and context provided below.
@@ -561,28 +640,46 @@ CONTEXT FROM USER'S MEETINGS:
 USER'S QUESTION:
 {question}
 """
-        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
-            try:
-                def call_gemini(target_model=model_name):
-                    return client.models.generate_content(
-                        model=target_model,
-                        contents=prompt,
-                    )
+        # Tier 1: Try Gemini if available and not disabled
+        client = self._get_gemini_client()
+        if client is not None:
+            for model_name in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]:
+                try:
+                    def call_gemini(target_model=model_name):
+                        return client.models.generate_content(
+                            model=target_model,
+                            contents=prompt,
+                        )
 
-                response = await run_in_threadpool(call_gemini)
-                if response.text and response.text.strip():
-                    return response.text.strip()
-            except Exception as e:
-                err_s = str(e)
-                logger.warning(f"Gemini ask_ares ({model_name}) error: {e}")
-                if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
-                    self._gemini_disabled = True
-                    break
+                    response = await run_in_threadpool(call_gemini)
+                    if response.text and response.text.strip():
+                        return response.text.strip()
+                except Exception as e:
+                    err_s = str(e)
+                    logger.warning(f"Gemini ask_ares ({model_name}) error: {e}")
+                    if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
+                        self._gemini_disabled = True
+                        break
 
-        return (
-            "I reviewed your meetings, but I was unable to generate an answer right now. "
-            "Please try asking again."
-        )
+        # Tier 2: Sarvam AI 105B Conversational Foundation Model
+        try:
+            from app.services.sarvam import sarvam_service
+            sarvam_ans = await sarvam_service.chat_completion(
+                messages=[
+                    {"role": "system", "content": "You are Ares, an intelligent executive meeting assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                model="sarvam-105b-conversations",
+                temperature=0.2,
+                max_tokens=400,
+            )
+            if sarvam_ans and sarvam_ans.strip():
+                return sarvam_ans.strip()
+        except Exception as e:
+            logger.warning(f"Sarvam AI ask_ares fallback error: {e}")
+
+        # Tier 3: Deterministic Local Extractor (guarantees an answer even without cloud LLM)
+        return self._extract_answer_from_context(question, context)
 
     async def _generate_summary_deepgram(self, transcript: str) -> dict:
         if not settings.DEEPGRAM_API_KEY:

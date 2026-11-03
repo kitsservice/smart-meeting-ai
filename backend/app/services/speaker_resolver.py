@@ -9,6 +9,7 @@ from app.services.deepgram_service import clean_json_markdown
 from app.services.voice_biometrics import (
     format_speaker_display_name,
     get_cached_enrolled_users,
+    is_generic_speaker_handle,
     voice_biometrics,
 )
 
@@ -146,29 +147,58 @@ def extract_meeting_attendees(db: Any, meeting_id: str) -> tuple[list[dict], lis
             for u in u_res.data or []:
                 uid = u["id"]
                 if uid in attendees_dict:
-                    if not attendees_dict[uid].get("name"):
-                        attendees_dict[uid]["name"] = u.get("full_name") or (
-                            u["email"].split("@")[0] if u.get("email") else None
-                        )
-                    if not attendees_dict[uid].get("email") and u.get("email"):
-                        attendees_dict[uid]["email"] = u.get("email")
+                    db_name = (u.get("full_name") or "").strip()
+                    db_email = (u.get("email") or "").strip()
+                    curr_name = attendees_dict[uid].get("name")
+                    if not curr_name or is_generic_speaker_handle(curr_name):
+                        if db_name and not is_generic_speaker_handle(db_name):
+                            attendees_dict[uid]["name"] = db_name
+                        elif db_email:
+                            attendees_dict[uid]["name"] = db_email.split("@")[0]
+                    elif db_name and not is_generic_speaker_handle(db_name):
+                        attendees_dict[uid]["name"] = db_name
+
+                    if not attendees_dict[uid].get("email") and db_email:
+                        attendees_dict[uid]["email"] = db_email
                     emb = u.get("voice_embedding")
                     if emb and isinstance(emb, list) and len(emb) == 192:
                         attendees_dict[uid]["voice_embedding"] = emb
         except Exception as u_err:
             logger.warning(f"Error querying users table for attendee details: {u_err}")
 
+    # Fallback for host: query auth admin if name is still missing or generic
+    if host_id and (
+        not attendees_dict.get(host_id, {}).get("name")
+        or is_generic_speaker_handle(attendees_dict.get(host_id, {}).get("name"))
+    ):
+        try:
+            auth_user = db.auth.admin.get_user_by_id(host_id)
+            if auth_user and auth_user.user:
+                u_meta = auth_user.user.user_metadata or {}
+                auth_name = u_meta.get("full_name") or u_meta.get("name")
+                auth_email = auth_user.user.email
+                if auth_name and not is_generic_speaker_handle(auth_name):
+                    attendees_dict[host_id]["name"] = auth_name
+                elif auth_email:
+                    attendees_dict[host_id]["name"] = auth_email.split("@")[0]
+                if auth_email and not attendees_dict[host_id].get("email"):
+                    attendees_dict[host_id]["email"] = auth_email
+        except Exception:
+            pass
+
     # 4. Clean up attendee names into Title Case
     attendees_list: list[dict] = []
     participant_counter = 1
     for _uid, att in attendees_dict.items():
-        clean_name = format_speaker_display_name(att.get("name"), att.get("email"))
-        if not clean_name or clean_name == "Speaker":
-            if att.get("is_host"):
-                clean_name = "Host"
-            else:
-                clean_name = f"Participant {participant_counter}"
-                participant_counter += 1
+        is_host = bool(att.get("is_host"))
+        raw_n = att.get("name")
+        email_n = att.get("email")
+        fallback = "Host" if is_host else f"Participant {participant_counter}"
+        clean_name = format_speaker_display_name(raw_n, email_n, fallback=fallback)
+        if clean_name.lower() == "speaker":
+            clean_name = fallback
+        if clean_name == fallback and not is_host:
+            participant_counter += 1
         att["name"] = clean_name
         attendees_list.append(att)
 
@@ -248,7 +278,7 @@ async def contextual_speaker_attribution_gemini(
         'Example format: {"0": "Arjun Sharma", "1": "Priya Patil"}'
     )
 
-    for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
+    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
         try:
             def call_gemini(m=model_name):
                 return gemini_client.models.generate_content(
@@ -323,10 +353,15 @@ def resolve_speaker_names_deterministic(
         return speaker_name_map
 
     # Tier 2: Single Attendee Shortcut
-    # Only map all speakers to solo_name if ONLY 1 speaker was actually detected in the audio.
-    # If multiple distinct voices are detected, collapsing them into the single attendee is invalid.
-    if len(attendees) == 1 and len(detected_speakers) == 1:
-        solo_name = attendees[0].get("name") or "Host"
+    # In a meeting with 1 registered attendee (the user / host), all unassigned
+    # speaker segments belong to that attendee. Microphone noise, acoustic shifts,
+    # or diarization pauses often split a single voice across multiple IDs.
+    if len(attendees) == 1:
+        raw_solo = attendees[0].get("name")
+        email_solo = attendees[0].get("email")
+        solo_name = format_speaker_display_name(raw_solo, email_solo, fallback="")
+        if not solo_name or is_generic_speaker_handle(solo_name):
+            solo_name = "Host"
         for spk_id in unassigned_spk_ids:
             speaker_name_map[spk_id] = solo_name
         return speaker_name_map
@@ -463,11 +498,13 @@ async def resolve_speaker_names(
 
     # -------------------------------------------------------------
     # Tier 2: Single Attendee Shortcut
-    # Only map all speakers to solo_name if ONLY 1 speaker was actually detected in the audio.
-    # If multiple distinct voices are detected, collapsing them into the single attendee is invalid.
     # -------------------------------------------------------------
-    if len(attendees) == 1 and len(detected_speakers) == 1:
-        solo_name = attendees[0].get("name") or "Host"
+    if len(attendees) == 1:
+        raw_solo = attendees[0].get("name")
+        email_solo = attendees[0].get("email")
+        solo_name = format_speaker_display_name(raw_solo, email_solo, fallback="")
+        if not solo_name or is_generic_speaker_handle(solo_name):
+            solo_name = "Host"
         for spk_id in unassigned_spk_ids:
             speaker_name_map[spk_id] = solo_name
         return speaker_name_map

@@ -1,21 +1,22 @@
 import asyncio
 import io
-import json
 import logging
 import time
 import wave
+
 import numpy as np
 from dotenv import load_dotenv
 
 load_dotenv("backend/.env")
 
-from app.core.config import settings
-from app.services.deepgram_service import deepgram_service, clean_json_markdown, ACTION_PATTERNS
-from app.services.voice_biometrics import voice_biometrics, format_speaker_display_name
-from app.services.speaker_resolver import (
+from app.services.deepgram_service import ACTION_PATTERNS, deepgram_service  # noqa: E402
+from app.services.speaker_resolver import (  # noqa: E402
     parse_members_from_description,
-    resolve_speaker_names_deterministic,
     resolve_speaker_names,
+)
+from app.services.voice_biometrics import (  # noqa: E402
+    format_speaker_display_name,
+    voice_biometrics,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -70,16 +71,25 @@ async def run_qa_suite():
     )
 
     # TEST 2: Member description parsing
-    desc_single = "[ROOM_CODE:123456] [STATUS:active] [MEMBERS:[{\"id\":\"u1\",\"name\":\"Alice\",\"is_host\":true}]] Notes"
+    desc_single = (
+        "[ROOM_CODE:123456] [STATUS:active] "
+        '[MEMBERS:[{"id":"u1","name":"Alice","is_host":true}]] Notes'
+    )
     members = parse_members_from_description(desc_single)
-    assert_test("Member JSON parsing (single-line)", len(members) == 1 and members[0]["name"] == "Alice")
+    assert_test(
+        "Member JSON parsing (single-line)",
+        len(members) == 1 and members[0]["name"] == "Alice",
+    )
 
     desc_multi = """[ROOM_CODE:999888] [STATUS:completed] [MEMBERS:[
       {"user_id": "u1", "name": "Kits", "is_host": true},
       {"user_id": "u2", "name": "Kits Sales", "is_host": false}
     ]] Recorded for 01:20"""
     members_m = parse_members_from_description(desc_multi)
-    assert_test("Member JSON parsing (multi-line)", len(members_m) == 2 and members_m[1]["name"] == "Kits Sales")
+    assert_test(
+        "Member JSON parsing (multi-line)",
+        len(members_m) == 2 and members_m[1]["name"] == "Kits Sales",
+    )
 
     # TEST 3: Multi-sample Centroid Biometric Math
     rng = np.random.default_rng(42)
@@ -93,10 +103,17 @@ async def run_qa_suite():
     centroid = np.mean([s1, s2, s3], axis=0)
     c_norm = np.linalg.norm(centroid)
     centroid /= c_norm
-    assert_test("Centroid dimension & normalization", len(centroid) == 192 and abs(np.linalg.norm(centroid) - 1.0) < 1e-5)
+    assert_test(
+        "Centroid dimension & normalization",
+        len(centroid) == 192 and abs(np.linalg.norm(centroid) - 1.0) < 1e-5,
+    )
 
     sim_self = float(np.dot(centroid, s1))
-    assert_test("Multi-sample intra-voice fidelity", sim_self > 0.90, f"similarity = {sim_self:.4f}")
+    assert_test(
+        "Multi-sample intra-voice fidelity",
+        sim_self > 0.90,
+        f"similarity = {sim_self:.4f}",
+    )
 
     diff_speaker = rng.standard_normal(192).astype(np.float32)
     diff_speaker /= np.linalg.norm(diff_speaker)
@@ -124,26 +141,53 @@ async def run_qa_suite():
     assert_test("Marathi action pattern detection", len(mr_matches) >= 1, f"matches={mr_matches}")
 
     # TEST 6: Extractive Fallback with Indic Action Items
-    transcript_indic = "[00:00] Kits: हमें कल तक न्यू बिल्ड डिप्लॉय करना है।\n[00:05] Sarthak: ठीक है, मी टेस्टिंग पूर्ण करतो।"
+    transcript_indic = (
+        "[00:00] Kits: हमें कल तक न्यू बिल्ड डिप्लॉय करना है।\n"
+        "[00:05] Sarthak: ठीक है, मी टेस्टिंग पूर्ण करतो।"
+    )
     extractive_res = deepgram_service._generate_extractive_fallback(transcript_indic)
-    assert_test("Extractive summary generation", bool(extractive_res.get("summary")), extractive_res.get("summary")[:40])
-    assert_test("Extractive action item extraction", len(extractive_res.get("action_items", [])) >= 1)
+    assert_test(
+        "Extractive summary generation",
+        bool(extractive_res.get("summary")),
+        extractive_res.get("summary")[:40],
+    )
+    assert_test(
+        "Extractive action item extraction",
+        len(extractive_res.get("action_items", [])) >= 1,
+    )
 
     # TEST 7: Deepgram Live API Health & Resiliency
     t0 = time.time()
     deepgram_healthy = False
     try:
-        segments = await deepgram_service.transcribe_audio_with_segments(audio_sample, language="en")
+        _ = await asyncio.wait_for(
+            deepgram_service.transcribe_audio_with_segments(audio_sample, language="en"),
+            timeout=3.0,
+        )
         t_dg = time.time() - t0
         deepgram_healthy = True
-        assert_test("Deepgram Nova-3 API Live Response", deepgram_healthy, f"Latency={t_dg*1000:.0f}ms")
+        assert_test(
+            "Deepgram Nova-3 API Live Response",
+            deepgram_healthy,
+            f"Latency={t_dg * 1000:.0f}ms",
+        )
     except Exception as e:
         assert_test("Deepgram Nova-3 API Live Response", False, str(e))
 
     # TEST 8: Full Speaker Resolver Multi-Attendee attribution
     test_segments = [
-        {"speaker_id": 0, "start": 0.0, "end": 3.0, "text": "Good morning team, let's start the meeting."},
-        {"speaker_id": 1, "start": 3.5, "end": 7.0, "text": "Thanks Kits, here is the sales pipeline update."},
+        {
+            "speaker_id": 0,
+            "start": 0.0,
+            "end": 3.0,
+            "text": "Good morning team, let's start the meeting.",
+        },
+        {
+            "speaker_id": 1,
+            "start": 3.5,
+            "end": 7.0,
+            "text": "Thanks Kits, here is the sales pipeline update.",
+        },
     ]
     attendees = [
         {"id": "user-kits", "name": "Kits", "is_host": True},

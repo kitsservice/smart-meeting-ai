@@ -221,12 +221,82 @@ class SarvamAIService:
         valid_texts = [text for _, text in results if text]
         return " ".join(valid_texts)
 
+    async def chat_completion(
+        self,
+        messages: list[dict[str, str]],
+        model: str = "sarvam-105b-conversations",
+        temperature: float = 0.2,
+        max_tokens: int = 400,
+    ) -> str | None:
+        """Calls Sarvam AI conversational 105B LLM for meeting intelligence and Q&A."""
+        if not settings.SARVAM_API_KEY:
+            return None
+
+        url = "/v1/chat/completions"
+        headers = {
+            "api-subscription-key": settings.SARVAM_API_KEY,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        try:
+            res = await self.client.post(url, json=payload, headers=headers)
+            if res.status_code == 200:
+                data = res.json()
+                choices = data.get("choices") or []
+                if choices:
+                    msg = choices[0].get("message") or {}
+                    content = msg.get("content")
+                    if content and isinstance(content, str) and content.strip():
+                        return content.strip()
+            else:
+                logger.warning(
+                    f"Sarvam chat completion returned {res.status_code}: {res.text[:200]}"
+                )
+        except Exception as e:
+            logger.warning(f"Sarvam chat completion error: {e}")
+
+        return None
+
     async def generate_summary(self, transcript: str) -> dict:
-        """
-        Summary fallback.
-        """
+        """Generates executive summary and action items using Sarvam 105B model."""
+        prompt = (
+            "You are an executive meeting assistant. "
+            "Given the meeting transcript below, generate:\n"
+            "1. A concise executive summary (3-4 sentences).\n"
+            "2. Specific action items with assignees if mentioned.\n\n"
+            f"TRANSCRIPT:\n{transcript[:4000]}\n\n"
+            "Respond in JSON format with keys 'summary' (string) and 'action_items' (list of {'task': str, 'assignee': str | null})."
+        )
+        content = await self.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=500,
+        )
+        if content:
+            try:
+                # Strip markdown code blocks if present
+                clean_json = content
+                if "```json" in clean_json:
+                    clean_json = clean_json.split("```json")[1].split("```")[0]
+                elif "```" in clean_json:
+                    clean_json = clean_json.split("```")[1].split("```")[0]
+                data = json.loads(clean_json.strip())
+                if isinstance(data, dict) and "summary" in data:
+                    return {
+                        "summary": str(data.get("summary", "")).strip(),
+                        "action_items": data.get("action_items", []),
+                    }
+            except Exception:
+                pass
+
         return {
-            "summary": "AI Summaries are managed via Gemini and Deepgram Intelligence.",
+            "summary": content or "Meeting transcript recorded and processed successfully.",
             "action_items": [],
         }
 

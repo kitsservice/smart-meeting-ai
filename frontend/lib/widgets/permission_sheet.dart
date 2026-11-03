@@ -47,7 +47,7 @@ class PermissionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     IconData icon;
     String title;

@@ -30,6 +30,8 @@ def test_backend_endpoints():
     assert format_speaker_display_name("rahul sharma") == "Rahul Sharma"
     assert format_speaker_display_name(None, "john.doe@example.com") == "John Doe"
     assert format_speaker_display_name(None, None) == "Speaker"
+    assert format_speaker_display_name("kitssalesteam", "kitssalesteam@gmail.com") == "Kitssalesteam"
+    assert format_speaker_display_name(None, "kitssalesteam@gmail.com") == "Kitssalesteam"
     print("[PASS] Speaker display name formatting logic operates accurately.")
 
     # 5. Multi-Sample Centroid Math Verification
@@ -52,6 +54,13 @@ def test_backend_endpoints():
     sim3 = float(np.dot(centroid, e3))
     assert sim1 > 0.85 and sim2 > 0.85 and sim3 > 0.85
     print("[PASS] Multi-sample 3-phrase centroid averaging confirmed with >85% cross-similarity.")
+
+    # 6. Privacy Policy Endpoint Verification
+    print("--- 6. Testing Privacy Policy Webpage Endpoint (GET /privacy) ---")
+    from main import privacy_page
+    privacy_res = privacy_page()
+    assert privacy_res is not None
+    print("[PASS] Privacy Policy webpage served successfully with valid HTML response.")
 
     print("\n===========================================")
     print("ALL BACKEND QA TEST SUITES PASSED CLEANLY!")

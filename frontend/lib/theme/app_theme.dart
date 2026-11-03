@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Brand Colors - Classic Corporate (LinkedIn Style)
@@ -47,26 +46,19 @@ class AppTheme {
   static const double radiusButton = 12.0;
   static const double radiusChip = 8.0;
 
-  // Adaptive Helpers for Light / Dark Mode
-  static Color cardBg(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? const Color(0xFF1E293B) : Colors.white;
+  // Hardcoded UI Theme Helpers - Guarantees consistent colors across all devices regardless of OS theme
+  static Color cardBg([BuildContext? context]) {
+    return Colors.white;
   }
 
-  static Color cardBorder(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : dividerColor.withValues(alpha: 0.85);
+  static Color cardBorder([BuildContext? context]) {
+    return const Color(0xFFE2E8F0);
   }
 
-  static List<BoxShadow> cardShadow(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  static List<BoxShadow> cardShadow([BuildContext? context]) {
     return [
       BoxShadow(
-        color: isDark
-            ? Colors.black.withValues(alpha: 0.3)
-            : Colors.black.withValues(alpha: 0.03),
+        color: Colors.black.withValues(alpha: 0.04),
         blurRadius: 10,
         offset: const Offset(0, 3),
       ),
@@ -75,14 +67,62 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: backgroundColor,
-      colorScheme: ColorScheme.fromSeed(seedColor: primaryColor),
-      textTheme: GoogleFonts.interTextTheme(),
+      canvasColor: backgroundColor,
+      cardColor: surfaceColor,
+      dividerColor: dividerColor,
+      colorScheme: const ColorScheme.light(
+        primary: primaryColor,
+        secondary: secondaryColor,
+        surface: surfaceColor,
+        error: dangerColor,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: textPrimary,
+        onError: Colors.white,
+      ),
+      fontFamilyFallback: const [
+        'Inter',
+        '-apple-system',
+        'BlinkMacSystemFont',
+        'Segoe UI',
+        'Roboto',
+        'Helvetica Neue',
+        'Arial',
+        'sans-serif',
+      ],
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+        displayMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+        displaySmall: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+        headlineLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+        headlineMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w700),
+        headlineSmall: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+        titleLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+        titleMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+        titleSmall: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
+        bodyLarge: TextStyle(color: textPrimary),
+        bodyMedium: TextStyle(color: textPrimary),
+        bodySmall: TextStyle(color: textSecondary),
+        labelLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+        labelMedium: TextStyle(color: textSecondary),
+        labelSmall: TextStyle(color: textSecondary),
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: backgroundColor,
+        foregroundColor: textPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
         iconTheme: IconThemeData(color: textPrimary),
+        titleTextStyle: TextStyle(
+          color: textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: Colors.white,
@@ -96,43 +136,36 @@ class AppTheme {
           fontWeight: FontWeight.w500,
           fontSize: 11,
         ),
-        elevation: 8, // Very subtle shadow
+        elevation: 8,
         type: BottomNavigationBarType.fixed,
+      ),
+      cardTheme: CardThemeData(
+        color: surfaceColor,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusCard),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surfaceColor,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusCard),
+        ),
+        titleTextStyle: const TextStyle(
+          color: textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+        contentTextStyle: const TextStyle(
+          color: textSecondary,
+          fontSize: 14,
+        ),
       ),
     );
   }
 
-  static ThemeData get darkTheme {
-    return ThemeData(
-      brightness: Brightness.dark,
-      primaryColor: primaryColor,
-      scaffoldBackgroundColor: darkSurface,
-      colorScheme: ColorScheme.fromSeed(
-        brightness: Brightness.dark,
-        seedColor: primaryColor,
-        surface: darkSurface,
-      ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: darkSurface,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Color(0xFF1E1E1E),
-        selectedItemColor: primaryColor,
-        unselectedItemColor: Colors.grey,
-        selectedLabelStyle: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
-        ),
-        unselectedLabelStyle: TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 11,
-        ),
-        elevation: 8,
-        type: BottomNavigationBarType.fixed,
-      ),
-    );
-  }
+  // Hardcoded Theme: Dark theme is set to lightTheme to ensure 100% consistent display across all devices
+  static ThemeData get darkTheme => lightTheme;
 }

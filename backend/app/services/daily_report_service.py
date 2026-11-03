@@ -3,6 +3,8 @@ import logging
 import re
 from typing import Any
 
+from fastapi.concurrency import run_in_threadpool
+
 from app.core.config import settings
 from app.services.speaker_resolver import parse_members_from_description
 
@@ -23,8 +25,11 @@ class DailyReportService:
 
     def __init__(self):
         self._gemini_client = None
+        self._gemini_disabled = False
 
     def _get_gemini_client(self):
+        if getattr(self, "_gemini_disabled", False):
+            return None
         if self._gemini_client is None and settings.GEMINI_API_KEY:
             try:
                 from google import genai
@@ -277,15 +282,18 @@ Respond strictly with a JSON object in this format (no markdown fences):
     ]
 }}
 """
-        for model_name in ["gemini-2.5-flash", "gemini-3.8-flash"]:
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]:
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                    ),
-                )
+                def call_gemini(target_model=model_name):
+                    return client.models.generate_content(
+                        model=target_model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                        ),
+                    )
+
+                response = await run_in_threadpool(call_gemini)
                 raw = (response.text or "").strip()
                 if raw.startswith("```json"):
                     raw = raw[7:]
@@ -298,6 +306,10 @@ Respond strictly with a JSON object in this format (no markdown fences):
                     return parsed
             except Exception as e:
                 logger.warning(f"Gemini Daily Report error with {model_name}: {e}")
+                err_s = str(e)
+                if "PERMISSION_DENIED" in err_s or "403" in err_s or "free tier" in err_s:
+                    self._gemini_disabled = True
+                    break
 
         return None
 

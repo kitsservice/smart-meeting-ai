@@ -192,8 +192,7 @@ class ResponsiveSheetContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    const defaultBg = Colors.white;
 
     return Center(
       child: ConstrainedBox(

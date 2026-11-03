@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — Smart Meeting AI</title>
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-dark: #1D4ED8;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+            --bg-page: #F8FAFC;
+            --bg-card: #FFFFFF;
+            --border-color: #E2E8F0;
+            --accent-green: #10B981;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            line-height: 1.7;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 820px;
+            margin: 0 auto;
+            background: var(--bg-card);
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border-color);
+            padding: 48px;
+        }
+        @media (max-width: 640px) {
+            .container {
+                padding: 24px;
+                border-radius: 14px;
+            }
+        }
+        .header {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 28px;
+            margin-bottom: 32px;
+        }
+        .badge {
+            display: inline-block;
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 14px;
+            border-radius: 999px;
+            margin-bottom: 14px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        h1 {
+            font-size: 30px;
+            font-weight: 800;
+            color: #0F172A;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+        .meta-info {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0F172A;
+            margin-top: 36px;
+            margin-bottom: 14px;
+            border-left: 4px solid var(--primary);
+            padding-left: 12px;
+        }
+        p {
+            margin-bottom: 16px;
+            color: #334155;
+            font-size: 15px;
+        }
+        ul {
+            margin-left: 24px;
+            margin-bottom: 18px;
+            color: #334155;
+            font-size: 15px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .highlight-box {
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin: 22px 0;
+            font-size: 14.5px;
+            color: #1E3A8A;
+        }
+        .deletion-box {
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin: 22px 0;
+            font-size: 14.5px;
+            color: #991B1B;
+        }
+        .contact-card {
+            background: #F1F5F9;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 28px;
+            font-size: 14.5px;
+        }
+        a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span class="badge">Official Legal Document</span>
+            <h1>Privacy Policy for Smart Meeting AI</h1>
+            <div class="meta-info">
+                <strong>Application:</strong> Smart Meeting AI (Package: <code>com.kits.ares</code>)<br>
+                <strong>Developer:</strong> KITS Service<br>
+                <strong>Effective Date:</strong> November 3, 2026<br>
+                <strong>Last Updated:</strong> November 3, 2026
+            </div>
+        </div>
+
+        <div class="highlight-box">
+            <strong>Summary Guarantee:</strong> Smart Meeting AI processes audio solely to transcribe meetings, identify speakers, and extract action items. Your raw voice recordings, transcripts, and biometric voice embeddings belong exclusively to you. <strong>We do not sell, rent, or monetize your personal data or meeting content to any third parties or advertisers.</strong>
+        </div>
+
+        <h2>1. Introduction</h2>
+        <p>This Privacy Policy explains how <strong>KITS Service</strong> ("we", "us", or "our") collects, uses, stores, and protects information when you use our mobile application <strong>Smart Meeting AI</strong> ("the Application" or "App"). We comply with all applicable data protection regulations and the <strong>Google Play Developer Program Policies (User Data Policy)</strong>.</p>
+        <p>By downloading, installing, or using Smart Meeting AI, you consent to the practices described in this Privacy Policy.</p>
+
+        <h2>2. Information We Collect and How We Use It</h2>
+        <p>To provide AI-powered transcription, diarization, and meeting intelligence, we collect the following categories of information:</p>
+
+        <h3>A. Audio Recordings & Microphone Access (RECORD_AUDIO)</h3>
+        <ul>
+            <li><strong>Data Collected:</strong> Audio streams recorded through your device microphone during active meeting sessions or voice calibration.</li>
+            <li><strong>Purpose:</strong> Used exclusively to convert spoken audio into written text, perform real-time speech diarization, and extract key action items.</li>
+            <li><strong>Foreground Service:</strong> A foreground notification service is utilized while recording to ensure uninterrupted audio capture when your screen is locked or while multitasking.</li>
+            <li><strong>Retention:</strong> Temporary audio buffers on device storage are automatically purged after transcription is verified and saved.</li>
+        </ul>
+
+        <h3>B. Voice Biometrics & Speaker Signatures</h3>
+        <ul>
+            <li><strong>Data Collected:</strong> A 192-dimensional numerical vector (acoustic embedding) generated from a short 2–3 second user voice sample.</li>
+            <li><strong>Purpose:</strong> Used strictly within your meetings to distinguish your voice from other meeting participants and correctly attribute your name to spoken segments.</li>
+            <li><strong>Security:</strong> The biometric embedding is a one-way mathematical abstraction from which original raw voice or identifiable speech cannot be reverse-engineered. It is stored securely in encrypted cloud storage and never shared with third-party advertisers.</li>
+        </ul>
+
+        <h3>C. Meeting Content & Transcripts</h3>
+        <ul>
+            <li><strong>Data Collected:</strong> Generated transcripts, meeting titles, descriptions, executive summaries, decisions, and assigned action items.</li>
+            <li><strong>Purpose:</strong> To allow you to review past meeting notes, search transcripts semantically, query the Ares AI meeting assistant, and synchronize meetings across your signed-in devices.</li>
+        </ul>
+
+        <h3>D. Account & Profile Information</h3>
+        <ul>
+            <li><strong>Data Collected:</strong> Your email address, display name, and unique user ID provided when you register or sign in using Supabase Authentication or Google OAuth.</li>
+            <li><strong>Purpose:</strong> To authenticate your account, secure your meetings with Row Level Security (RLS), and personalize speaker names.</li>
+        </ul>
+
+        <h3>E. Device & Diagnostics Data</h3>
+        <ul>
+            <li><strong>Data Collected:</strong> Device manufacturer, model, operating system version, and crash stack traces collected anonymously via Sentry.</li>
+            <li><strong>Purpose:</strong> Strictly for technical troubleshooting, performance optimization, and bug fixing.</li>
+        </ul>
+
+        <h2>3. Third-Party Service Providers (Data Processors)</h2>
+        <p>We work with trusted industry-leading cloud service providers to power specific technical functions of the Application. All third parties are contractually bound by confidentiality and data processing agreements:</p>
+        <ul>
+            <li><strong>Deepgram Inc.:</strong> Cloud-based automatic speech recognition (ASR) and speaker diarization engine.</li>
+            <li><strong>Sarvam AI:</strong> Specialized Indic language processing for Hindi, Marathi, and code-mixed speech recognition and conversational intelligence.</li>
+            <li><strong>Supabase Inc.:</strong> Cloud PostgreSQL database, user authentication, and secure encrypted storage.</li>
+            <li><strong>Sentry (Functional Software, Inc.):</strong> Crash reporting and application stability monitoring.</li>
+        </ul>
+
+        <h2>4. Data Storage, Security, and Encryption</h2>
+        <p>We implement rigorous security measures to protect your information against unauthorized access, loss, or alteration:</p>
+        <ul>
+            <li><strong>Encryption in Transit:</strong> All data transmitted between the mobile application, our backend APIs, and cloud services is encrypted using modern <strong>HTTPS / TLS 1.3</strong> protocols.</li>
+            <li><strong>Encryption at Rest:</strong> All stored database records, transcripts, and voice embeddings are encrypted at rest with industry-standard <strong>AES-256</strong> encryption.</li>
+            <li><strong>Access Control:</strong> Database tables are strictly protected by <strong>PostgreSQL Row Level Security (RLS)</strong>, ensuring that only the authenticated owner can access their meeting data.</li>
+        </ul>
+
+        <h2>5. User Data Rights and Complete Deletion (Right to be Forgotten)</h2>
+        <p>In full compliance with Google Play's User Data Deletion Policy and global privacy standards, you maintain absolute control over your personal data:</p>
+
+        <div class="deletion-box">
+            <strong>In-App Account & Data Deletion:</strong><br>
+            You can delete your account and all associated personal data directly within the app at any time:
+            <ol style="margin-left: 20px; margin-top: 8px;">
+                <li>Open <strong>Smart Meeting AI</strong> on your device.</li>
+                <li>Go to <strong>Settings</strong>.</li>
+                <li>Scroll to the bottom and tap <strong>Delete Everything</strong>.</li>
+                <li>Confirm deletion.</li>
+            </ol>
+            Upon confirmation, your user profile, voice biometrics signature, all meeting transcripts, summaries, action items, and audio files are <strong>immediately and permanently deleted</strong> from our cloud databases. This action is irreversible.
+        </div>
+
+        <p>You may also submit a manual deletion request by contacting us at <a href="mailto:kitsserviceakola@gmail.com">kitsserviceakola@gmail.com</a>. Manual requests are fulfilled within 48 business hours.</p>
+
+        <h2>6. Children's Privacy</h2>
+        <p>Smart Meeting AI is intended for business professionals, students, and general productivity users. Our services are not directed to individuals under the age of 13 (or under 16 in certain jurisdictions), and we do not knowingly collect personal information from children.</p>
+
+        <h2>7. Changes to This Privacy Policy</h2>
+        <p>We may periodically update this Privacy Policy to reflect application updates or regulatory changes. Any modifications will be posted to this publicly accessible page with an updated revision date. We encourage you to review this policy periodically.</p>
+
+        <h2>8. Contact Information</h2>
+        <div class="contact-card">
+            If you have questions, feedback, or data privacy requests concerning Smart Meeting AI, please contact our team:
+            <br><br>
+            <strong>Developer:</strong> KITS Service<br>
+            <strong>Lead Developer Contact:</strong> Arjun & Technical Team<br>
+            <strong>Support Email:</strong> <a href="mailto:kitsserviceakola@gmail.com">kitsserviceakola@gmail.com</a><br>
+            <strong>Location:</strong> Akola, Maharashtra, India<br>
+            <strong>GitHub Repository:</strong> <a href="https://github.com/kitsservice/smart-meeting-ai" target="_blank" rel="noopener">github.com/kitsservice/smart-meeting-ai</a>
+        </div>
+
+        <div class="footer">
+            &copy; 2026 KITS Service. All rights reserved. Smart Meeting AI.
+        </div>
+    </div>
+</body>
+</html>

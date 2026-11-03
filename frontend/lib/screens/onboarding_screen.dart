@@ -58,32 +58,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           maxWidth: 580.0,
           child: Column(
             children: [
-            // Header with Skip button
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
-                vertical: 16.0,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (_currentPage < _onboardingData.length - 1)
-                    TextButton(
-                      onPressed: _completeOnboarding,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.textSecondary,
-                      ),
-                      child: const Text(
-                        'Skip',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ).animate().fade(duration: 400.ms),
-                ],
-              ),
-            ),
+            const SizedBox(height: 16),
 
             // Carousel
             Expanded(

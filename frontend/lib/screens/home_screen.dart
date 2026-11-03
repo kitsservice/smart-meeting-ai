@@ -1949,7 +1949,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     required Color chipBgColor,
     required Color chipTextColor,
   }) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    const isDarkMode = false;
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();

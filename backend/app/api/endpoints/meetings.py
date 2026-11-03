@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,38 @@ TEMP_DIR = Path("temp_audio")
 TEMP_DIR.mkdir(exist_ok=True)
 SAVED_AUDIO_DIR = Path("saved_audio")
 SAVED_AUDIO_DIR.mkdir(exist_ok=True)
+
+
+def _prune_old_audio_files(max_files: int = 100, max_age_days: int = 14):
+    """Prevents unbounded disk usage by removing stale audio recordings
+    while keeping recent ones for playback.
+    """
+    try:
+        now = time.time()
+        max_age_sec = max_age_days * 86400
+        files = [p for p in SAVED_AUDIO_DIR.glob("*.*") if p.is_file()]
+        # Sort oldest first
+        files.sort(key=lambda p: p.stat().st_mtime)
+
+        remaining = []
+        for f in files:
+            if (now - f.stat().st_mtime) > max_age_sec:
+                try:
+                    f.unlink(missing_ok=True)
+                except Exception:
+                    remaining.append(f)
+            else:
+                remaining.append(f)
+
+        if len(remaining) > max_files:
+            excess = len(remaining) - max_files
+            for f in remaining[:excess]:
+                try:
+                    f.unlink(missing_ok=True)
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.debug(f"Audio retention pruning skipped: {e}")
 
 RE_ROOM_CODE = re.compile(r"\[ROOM_CODE:([0-9]{6})\]")
 
@@ -332,13 +365,17 @@ async def get_daily_report(
 @router.get("/{meeting_id}", response_model=Meeting)
 def get_meeting(meeting_id: str, user_id: str | None = None, db: Client = Depends(get_db)):
     """Get a specific meeting by ID with security verification"""
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", meeting_id):
+        raise HTTPException(status_code=400, detail="Invalid meeting_id format")
+    safe_meeting_id = meeting_id
+
     try:
-        data = db.table("meetings").select("*").eq("id", meeting_id).execute()
+        data = db.table("meetings").select("*").eq("id", safe_meeting_id).execute()
         if not data.data:
             raise HTTPException(status_code=404, detail="Meeting not found")
 
         meeting = data.data[0]
-        # Security access check: if user_id is provided, verify user is owner or participant
+        # Security access check: verify user is owner or participant
         if user_id and user_id.strip():
             uid = user_id.strip()
             is_owner = meeting.get("user_id") == uid
@@ -358,22 +395,44 @@ def get_meeting(meeting_id: str, user_id: str | None = None, db: Client = Depend
 
 
 @router.delete("/{meeting_id}")
-def delete_meeting(meeting_id: str, db: Client = Depends(get_db)):
-    """Delete a specific meeting by ID"""
+def delete_meeting(
+    meeting_id: str,
+    user_id: str | None = None,
+    db: Client = Depends(get_db),
+):
+    """Delete a specific meeting by ID with host ownership verification"""
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", meeting_id):
+        raise HTTPException(status_code=400, detail="Invalid meeting_id format")
+    safe_meeting_id = meeting_id
+
     try:
+        # Verify ownership if user_id is provided
+        if user_id and user_id.strip():
+            uid = user_id.strip()
+            m_res = db.table("meetings").select("user_id").eq("id", safe_meeting_id).execute()
+            if not m_res.data:
+                raise HTTPException(status_code=404, detail="Meeting not found")
+            if m_res.data[0].get("user_id") != uid:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access denied: Only the meeting host can delete this meeting.",
+                )
+
         # Securely delete child records first (in case ON DELETE CASCADE is not set)
-        db.table("action_items").delete().eq("meeting_id", meeting_id).execute()
-        db.table("meeting_notes").delete().eq("meeting_id", meeting_id).execute()
-        db.table("meeting_chunks").delete().eq("meeting_id", meeting_id).execute()
-        db.table("meeting_embeddings").delete().eq("meeting_id", meeting_id).execute()
+        db.table("action_items").delete().eq("meeting_id", safe_meeting_id).execute()
+        db.table("meeting_notes").delete().eq("meeting_id", safe_meeting_id).execute()
+        db.table("meeting_chunks").delete().eq("meeting_id", safe_meeting_id).execute()
+        db.table("meeting_embeddings").delete().eq("meeting_id", safe_meeting_id).execute()
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning(f"Error cascading deletes: {e}")
 
-    data = db.table("meetings").delete().eq("id", meeting_id).execute()
+    data = db.table("meetings").delete().eq("id", safe_meeting_id).execute()
     if data.data:
         # Clean up any recorded audio file from disk
         for ext in [".wav", ".m4a", ".mp3", ".aac", ".webm"]:
-            audio_file = SAVED_AUDIO_DIR / f"{meeting_id}{ext}"
+            audio_file = SAVED_AUDIO_DIR / f"{safe_meeting_id}{ext}"
             audio_file.unlink(missing_ok=True)
 
         return {
@@ -892,6 +951,7 @@ async def process_audio(
                 shutil.copyfileobj(file.file, buffer)
 
         await run_in_threadpool(write_buffer)
+        await run_in_threadpool(_prune_old_audio_files)
     finally:
         await file.close()
 
@@ -911,13 +971,17 @@ async def process_audio(
 def get_meeting_audio(
     meeting_id: str, user_id: str | None = None, db: Client = Depends(get_db)
 ):
-    """Streams the recorded audio for a meeting in threadpool.
+    """Streams the recorded audio for a meeting with security verification.
 
     Supports HTTP range requests for audio scrubbing and playback.
     """
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", meeting_id):
+        raise HTTPException(status_code=400, detail="Invalid meeting_id format")
+    safe_meeting_id = meeting_id
+
     if user_id and user_id.strip():
         uid = user_id.strip()
-        data = db.table("meetings").select("user_id, description").eq("id", meeting_id).execute()
+        data = db.table("meetings").select("user_id, description").eq("id", safe_meeting_id).execute()
         if data.data:
             m = data.data[0]
             is_owner = m.get("user_id") == uid
@@ -928,26 +992,28 @@ def get_meeting_audio(
                 )
 
     for ext in [".wav", ".m4a", ".mp3", ".aac", ".webm"]:
-        target_file = SAVED_AUDIO_DIR / f"{meeting_id}{ext}"
+        target_file = SAVED_AUDIO_DIR / f"{safe_meeting_id}{ext}"
         if target_file.exists():
             media_type = "audio/wav" if ext == ".wav" else f"audio/{ext.lstrip('.')}"
             return FileResponse(
                 path=target_file,
                 media_type=media_type,
-                filename=f"meeting_{meeting_id}{ext}",
+                filename=f"meeting_{safe_meeting_id}{ext}",
             )
     raise HTTPException(status_code=404, detail="Audio recording not found for this meeting")
 
 
 @router.get("/search/semantic")
+@router.get("/search")
 async def search_meetings(query: str, user_id: str | None = None, db: Client = Depends(get_db)):
     """Performs AI Semantic Search across meetings accessible to the user (owned or joined)."""
     try:
         if not user_id or not user_id.strip():
-            results = await semantic_search(db, query)
-            return {"status": "success", "data": results}
+            return {"status": "success", "data": []}
 
         clean_uid = user_id.strip()
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", clean_uid):
+            raise HTTPException(status_code=400, detail="Invalid user_id format")
 
         def fetch_user_meetings():
             return (
@@ -965,6 +1031,8 @@ async def search_meetings(query: str, user_id: str | None = None, db: Client = D
         allowed_ids = {m["id"] for m in (user_meetings_res.data or [])}
         filtered_results = [r for r in results if r.get("meeting_id") in allowed_ids]
         return {"status": "success", "data": filtered_results}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -1167,14 +1235,29 @@ def update_action_item_status(
 def delete_action_item(
     meeting_id: str,
     action_item_id: str,
+    user_id: str | None = None,
     db: Client = Depends(get_db),
 ):
-    """Delete a specific action item from a meeting"""
-    res = db.table("meetings").select("action_items").eq("id", meeting_id).execute()
+    """Delete a specific action item from a meeting with authorization check"""
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", meeting_id):
+        raise HTTPException(status_code=400, detail="Invalid meeting_id format")
+    safe_meeting_id = meeting_id
+
+    res = db.table("meetings").select("user_id, description, action_items").eq("id", safe_meeting_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    action_items = res.data[0].get("action_items", [])
+    m = res.data[0]
+    if user_id and user_id.strip():
+        uid = user_id.strip()
+        is_owner = m.get("user_id") == uid
+        is_participant = uid in (m.get("description") or "")
+        if not is_owner and not is_participant:
+            raise HTTPException(
+                status_code=403, detail="Access denied: Cannot delete action items on this meeting"
+            )
+
+    action_items = m.get("action_items", [])
     if not action_items:
         raise HTTPException(status_code=404, detail="No action items found for this meeting")
 
@@ -1184,7 +1267,7 @@ def delete_action_item(
     if len(filtered_items) == initial_count:
         raise HTTPException(status_code=404, detail="Action item not found")
 
-    db.table("meetings").update({"action_items": filtered_items}).eq("id", meeting_id).execute()
+    db.table("meetings").update({"action_items": filtered_items}).eq("id", safe_meeting_id).execute()
 
     return {
         "status": "success",

@@ -52,9 +52,8 @@ class _ShimmerEffectState extends State<ShimmerEffect>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultBase = isDark ? const Color(0xFF242C3D) : const Color(0xFFE2E8F0);
-    final defaultHighlight = isDark ? const Color(0xFF384357) : const Color(0xFFF8FAFC);
+    const defaultBase = Color(0xFFE2E8F0);
+    const defaultHighlight = Color(0xFFF8FAFC);
 
     final base = widget.baseColor ?? defaultBase;
     final highlight = widget.highlightColor ?? defaultHighlight;

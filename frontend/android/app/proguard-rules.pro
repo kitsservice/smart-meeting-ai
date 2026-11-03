@@ -27,5 +27,13 @@
 -dontwarn okio.**
 -dontwarn kotlinx.coroutines.**
 
+# Audio Recording & Playback
+-keep class com.llfbandit.record.** { *; }
+-dontwarn com.llfbandit.record.**
+
+# Connectivity & Device Plugins
+-keep class dev.fluttercommunity.plus.** { *; }
+-keep class com.builttoroam.devicecalendar.** { *; }
+
 # Google Play Core
 -dontwarn com.google.android.play.core.**

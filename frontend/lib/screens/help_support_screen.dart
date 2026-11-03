@@ -11,7 +11,7 @@ class HelpSupportScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -45,6 +45,19 @@ class HelpSupportScreen extends StatelessWidget {
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // User Guide & Feature Manual Header
+            _buildSectionHeader(
+              'Feature Guides & User Manual',
+              'Step-by-step walkthroughs for every tool in the app',
+              Icons.menu_book_rounded,
+              const Color(0xFF4364F7),
+              context,
+            ),
+            const SizedBox(height: 12),
+            _buildUserGuideSection(context),
+
+            const SizedBox(height: 32),
+
             // Best Practices Header
             _buildSectionHeader(
               'Best Practices',
@@ -244,7 +257,7 @@ class HelpSupportScreen extends StatelessWidget {
     Color accentColor,
     BuildContext context,
   ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     return Row(
       children: [
@@ -289,7 +302,7 @@ class HelpSupportScreen extends StatelessWidget {
   }
 
   Widget _buildTip(IconData icon, String text, BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     return Row(
       children: [
@@ -319,7 +332,7 @@ class HelpSupportScreen extends StatelessWidget {
   }
 
   Widget _buildFaqTile(String question, String answer, BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     return Theme(
       data: ThemeData(dividerColor: Colors.transparent),
@@ -360,7 +373,7 @@ class HelpSupportScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     return Container(
       decoration: BoxDecoration(
@@ -481,7 +494,7 @@ class HelpSupportScreen extends StatelessWidget {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (modalContext, setModalState) {
-            final isDark = Theme.of(modalContext).brightness == Brightness.dark;
+            const isDark = false;
 
             return Padding(
               padding: EdgeInsets.only(
@@ -868,7 +881,7 @@ class HelpSupportScreen extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        const isDark = false;
 
         return SafeArea(
           top: false,
@@ -1255,7 +1268,7 @@ class HelpSupportScreen extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        const isDark = false;
         final user = Supabase.instance.client.auth.currentUser;
 
         return SafeArea(
@@ -1527,7 +1540,7 @@ class HelpSupportScreen extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Includes app version (v2.0.2), device logs, and user ID to speed up support.',
+                            'Includes app version (v2.0.3), device logs, and user ID to speed up support.',
                             style: TextStyle(
                               fontSize: 11,
                               height: 1.3,
@@ -1549,7 +1562,7 @@ class HelpSupportScreen extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         final diagnostics =
-                            "App: Smart Meeting AI v2.0.2\nUser ID: ${user?.id ?? 'Guest'}\nEmail: ${user?.email ?? 'Not logged in'}\nTimestamp: ${DateTime.now().toIso8601String()}\n\n[Please describe your issue or question below]:\n";
+                            "App: Smart Meeting AI v2.0.3\nUser ID: ${user?.id ?? 'Guest'}\nEmail: ${user?.email ?? 'Not logged in'}\nTimestamp: ${DateTime.now().toIso8601String()}\n\n[Please describe your issue or question below]:\n";
                         final emailUri = Uri(
                           scheme: 'mailto',
                           path: supportEmail,
@@ -1620,4 +1633,698 @@ class HelpSupportScreen extends StatelessWidget {
       },
     );
   }
+
+  static final List<Map<String, dynamic>> _featureGuides = [
+    {
+      'title': '1. Solo Memos vs. Team Rooms',
+      'subtitle': 'Learn when to use quick voice notes vs 6-digit room codes',
+      'icon': Icons.groups_rounded,
+      'color': const Color(0xFF4364F7),
+      'description':
+          'Smart Meeting AI allows you to record private voice notes by yourself or collaborate in live team rooms with colleagues.',
+      'steps': [
+        'Solo Meeting: Simply tap "Start Meeting", enter a title, and press Start. You do not need to share the code.',
+        'Team Meeting: The Host starts the meeting and shares the 6-digit room code with attendees.',
+        'Joiners: Team members tap "Join Meeting", enter the code, and wait in the lobby until the host begins.',
+        'Audio Capture: Only the host phone records master audio to eliminate acoustic feedback and echoes.'
+      ],
+      'tip':
+          'Place the host device in the center of the conference table, face up, without obstructing the microphone.',
+      'actionText': 'Start a Meeting',
+      'actionRoute': '/active_meeting',
+    },
+    {
+      'title': '2. Voice Profile Biometrics',
+      'subtitle': 'How the AI identifies you by your real name',
+      'icon': Icons.record_voice_over_rounded,
+      'color': const Color(0xFF10B981),
+      'description':
+          'Our SpeechBrain ECAPA-TDNN biometric engine matches your voice frequency to your name automatically.',
+      'steps': [
+        'Open Voice Calibration from the home banner, drawer, or settings.',
+        'Record 3 separate voice samples (6-8 seconds each) reading the prompt aloud naturally.',
+        'The app calculates your 192-dimensional acoustic centroid and saves your signature.',
+        'In live meetings, all of your spoken sentences will automatically display your real name!'
+      ],
+      'tip':
+          'Record your calibration samples in a quiet room using your everyday business tone.',
+      'actionText': 'Open Voice Setup',
+      'actionRoute': '/voice_setup',
+    },
+    {
+      'title': '3. Interactive Timestamp Seeking',
+      'subtitle': 'Tap any [MM:SS] timestamp to jump audio playback',
+      'icon': Icons.fast_forward_rounded,
+      'color': const Color(0xFFF59E0B),
+      'description':
+          'Every sentence in your meeting transcript is synchronized with the recorded audio down to the exact second.',
+      'steps': [
+        'Open any meeting details from the Home screen or History list.',
+        'In the Transcript tab, find any sentence and tap its [MM:SS] timestamp tag.',
+        'The built-in audio player will instantly jump to that exact second and begin playing.',
+        'Adjust playback speed between 1.0x, 1.5x, and 2.0x on the floating audio player bar.'
+      ],
+      'tip':
+          'Use the search bar at the top of the transcript to search for keywords like "budget" or "deadline", then tap the timestamp!',
+      'actionText': 'Got it',
+      'actionRoute': null,
+    },
+    {
+      'title': '4. Ask Ares AI Meeting Copilot',
+      'subtitle': 'Chat with your meeting transcript to get instant answers',
+      'icon': Icons.auto_awesome_rounded,
+      'color': const Color(0xFF8B5CF6),
+      'description':
+          'Ask Ares is an intelligent meeting assistant powered by Google Gemini that answers questions directly from your meeting dialogue.',
+      'steps': [
+        'Tap the floating "Ask Ares" button in any meeting or on the Home screen.',
+        'Type or ask questions like: "What was decided about the project deadline?" or "List all action items assigned to Priya".',
+        'Ares replies with grounded answers, exact quotes, and direct timestamps.',
+        'You can also ask Ares to draft client follow-up emails based on the discussion.'
+      ],
+      'tip':
+          'You can query specific numbers, budget approvals, and team commitments with pinpoint precision.',
+      'actionText': 'Got it',
+      'actionRoute': null,
+    },
+    {
+      'title': '5. Action Items & Calendar Sync',
+      'subtitle': 'Extract tasks and sync directly to Google Calendar',
+      'icon': Icons.event_available_rounded,
+      'color': const Color(0xFF06B6D4),
+      'description':
+          'Never drop a follow-up item. The AI listens for commitments like "I will email the contract by Friday" and lists them under Action Items.',
+      'steps': [
+        'In Meeting Details, navigate to the "Action Items" tab.',
+        'Review detected tasks and their assignees.',
+        'Tap the calendar icon on any task to add it straight into your device Google/Apple calendar with reminders.',
+        'Check off items as your team completes them, or tap "+ Add Task" to create custom action items.'
+      ],
+      'tip':
+          'Speaking clear deadlines during the meeting (e.g. "by Monday at 3 PM") helps the AI set exact calendar alarm dates.',
+      'actionText': 'Got it',
+      'actionRoute': null,
+    },
+    {
+      'title': '6. Executive Daily Reports',
+      'subtitle': 'Consolidated end-of-day digest across all meetings',
+      'icon': Icons.pie_chart_rounded,
+      'color': const Color(0xFFEC4899),
+      'description':
+          'Designed for executives and managers to get a unified overview of all discussions conducted throughout the day.',
+      'steps': [
+        'On the Home screen or Meetings list, tap "Daily Report".',
+        'Select today or any previous calendar date.',
+        'The AI synthesizes total meeting duration, all attendees present, major company decisions, and a master task list.',
+        'Export or share the executive brief with your leadership team in 1 tap.'
+      ],
+      'tip':
+          'Save 45 minutes of manual status updates by reviewing the 5 PM Daily Report with your department leads.',
+      'actionText': 'Got it',
+      'actionRoute': null,
+    },
+    {
+      'title': '7. Hindi, Marathi & Multilingual Dialects',
+      'subtitle': 'Natively transcribes Indic languages with business slang',
+      'icon': Icons.translate_rounded,
+      'color': const Color(0xFFE11D48),
+      'description':
+          'Smart Meeting AI natively supports Hindi (हिन्दी), Marathi (मराठी), code-mixed Hinglish, and English without dropping colloquial slang.',
+      'steps': [
+        'By default, Ares automatically identifies language shifts on the fly.',
+        'Local conversational phrases like "kam complete karo", "udya meeting aahe", or "funda clear hai" are transcribed accurately.',
+        'To force a specific language, go to Settings > Language Priority and select Marathi, Hindi, or English.',
+        'Transcripts maintain speaker names regardless of the language spoken.'
+      ],
+      'tip':
+          'If your team mixes English and Marathi/Hindi frequently, leave the setting on "Auto-Detect" for optimal results.',
+      'actionText': 'Open Settings',
+      'actionRoute': '/settings',
+    },
+    {
+      'title': '8. Background Recording & Offline Auto-Sync',
+      'subtitle': 'Record with screen off and sync automatically when online',
+      'icon': Icons.cloud_off_rounded,
+      'color': const Color(0xFF64748B),
+      'description':
+          'Engineered for reliability in elevators, basements, or airplanes without reliable internet.',
+      'steps': [
+        'Android Foreground Service ensures recording continues even if your phone screen locks or turns off.',
+        'Use the persistent interactive notification to Pause or End meeting without opening the app.',
+        'If internet drops, audio is securely saved locally on your device.',
+        'The moment Wi-Fi or cellular data reconnects, the offline queue automatically uploads and transcribes in the background.'
+      ],
+      'tip':
+          'Allow "Battery Optimization Exemption" when prompted to ensure the OS never puts background recording to sleep.',
+      'actionText': 'Got it',
+      'actionRoute': null,
+    },
+  ];
+
+  Widget _buildUserGuideSection(BuildContext context) {
+    const isDark = false;
+
+    return Column(
+      children: [
+        // Hero Card: Manual Overview & Full SOP Button
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF4364F7).withValues(alpha: 0.3),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.auto_stories_rounded,
+                        color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Official SOP User Manual',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Comprehensive walkthrough for all features',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Explore the 8 essential workflows below to get 100% value out of Smart Meeting AI, from voice diarization to calendar sync.',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showFullManualDialog(context),
+                  icon: const Icon(Icons.chrome_reader_mode_rounded, size: 18),
+                  label: const Text(
+                    'Read Complete Manual & SOP',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF3B82F6),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // 8 Interactive Feature Guide Cards
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _featureGuides.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final guide = _featureGuides[index];
+            final color = guide['color'] as Color;
+
+            return InkWell(
+              onTap: () => _showFeatureGuideSheet(context, guide),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.cardBg(context) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(guide['icon'] as IconData,
+                          color: color, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            guide['title'] as String,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.5,
+                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            guide['subtitle'] as String,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? Colors.white60
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 14,
+                      color: color.withValues(alpha: 0.8),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  void _showFeatureGuideSheet(
+      BuildContext context, Map<String, dynamic> guide) {
+    final color = guide['color'] as Color;
+    final steps = guide['steps'] as List<String>;
+    final actionText = guide['actionText'] as String?;
+    final actionRoute = guide['actionRoute'] as String?;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(sheetContext).size.height * 0.88,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Badge & Title
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Icon(guide['icon'] as IconData,
+                                color: color, size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  guide['title'] as String,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  guide['subtitle'] as String,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // Description
+                      Text(
+                        guide['description'] as String,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          height: 1.45,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      const Text(
+                        'Step-by-Step Instructions',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Steps
+                      ...List.generate(steps.length, (idx) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  '${idx + 1}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: color,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  steps[idx],
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    height: 1.4,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+
+                      const SizedBox(height: 14),
+
+                      // Pro Tip Callout
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: color.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.lightbulb_rounded,
+                                color: color, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                guide['tip'] as String,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: color.withValues(alpha: 0.95),
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Bottom Action Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            if (actionRoute != null && context.mounted) {
+                              Navigator.pushNamed(context, actionRoute);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: color,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            actionText ?? 'Got it',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFullManualDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 650, maxWidth: 550),
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.menu_book_rounded,
+                        color: AppTheme.primaryColor, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ares AI User Manual & SOP',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Version 2.0.3 (Build 7)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(dialogCtx),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildManualChapter(
+                        '1. Getting Started & Permissions',
+                        'Grant Microphone, Notifications, and disable Battery Optimization for Ares. Complete your 3-phrase Voice Calibration to register your biometric voiceprint.',
+                      ),
+                      _buildManualChapter(
+                        '2. Solo Meetings & Voice Notes',
+                        'Tap "Start Meeting" -> "Start Session". Speak naturally. You do not need to share the room code for solo voice notes.',
+                      ),
+                      _buildManualChapter(
+                        '3. Live Room Collaboration',
+                        'The Host creates the meeting and shares the 6-digit code. Joiners enter the code to join the live room and link their biometric identities.',
+                      ),
+                      _buildManualChapter(
+                        '4. Transcripts with Named Speakers',
+                        'Deepgram Nova-3 + SpeechBrain diarizes every speaker. Tap any [MM:SS] timestamp to jump the audio player directly to that sentence.',
+                      ),
+                      _buildManualChapter(
+                        '5. Executive MoM Summaries',
+                        'Minutes of Meeting are generated in 15-30 seconds with key objectives, decisions made, and follow-ups.',
+                      ),
+                      _buildManualChapter(
+                        '6. Action Items & Calendar Alarms',
+                        'Tasks are extracted with assignees. Tap the calendar icon on any action item to push it to your Google Calendar.',
+                      ),
+                      _buildManualChapter(
+                        '7. Ask Ares AI Copilot',
+                        'Chat contextually with any meeting transcript. Ask for quotes, numbers, summaries, or draft follow-up emails.',
+                      ),
+                      _buildManualChapter(
+                        '8. Offline & Background Safety',
+                        'Turn your screen off freely while recording. If internet drops, audio is saved locally and automatically syncs when online.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text('Close Manual', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManualChapter(String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppTheme.textPrimary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 }

@@ -1,3 +1,4 @@
+import '../services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -338,10 +339,12 @@ class HomeMeetingSheets {
                                           .instance.client.auth.currentUser;
                                       final userId = currentUser?.id ??
                                           'user_${DateTime.now().millisecondsSinceEpoch}';
-                                      final userName = currentUser
-                                              ?.userMetadata?['full_name'] ??
-                                          (currentUser?.email?.split('@')[0] ??
-                                              'Participant');
+                                      final userName = ApiService.sanitizeDisplayName(
+                                        currentUser?.userMetadata?['full_name'] ??
+                                            currentUser?.userMetadata?['name'],
+                                        currentUser?.email,
+                                        fallback: 'Participant',
+                                      );
                                       await RoomService().recordParticipantJoin(
                                         cleanCode,
                                         userId,
@@ -408,7 +411,7 @@ class HomeMeetingSheets {
   }
 
   static void showMeetingCompletedSheet(BuildContext parentContext, String code) {
-    final isDark = Theme.of(parentContext).brightness == Brightness.dark;
+    const isDark = false;
 
     showModalBottomSheet(
       context: parentContext,

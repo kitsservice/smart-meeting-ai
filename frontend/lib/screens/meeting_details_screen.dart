@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../services/api_service.dart';
+import '../services/room_service.dart';
 import '../services/notification_service.dart';
 import '../services/calendar_service.dart';
 
@@ -42,6 +43,8 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
 
   void _startPollingIfNeeded(String id) {
     _pollingTimer?.cancel();
+
+    // Periodic heartbeat polling (every 2 seconds) to seamlessly fetch newly completed transcripts
     final clean = (_fullMeeting?['transcript'] ?? '').toString().trim();
     final isDone = clean.isNotEmpty &&
         clean != 'null' &&
@@ -52,7 +55,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
         clean != 'Transcription could not be completed.';
 
     if (!isDone) {
-      _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      _pollingTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
         if (!mounted) {
           timer.cancel();
           return;
@@ -78,11 +81,12 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
   }
 
   List<_TranscriptSegment> _getSegments(String transcript) {
-    if (_cachedTranscript == transcript && _cachedSegments.isNotEmpty) {
+    final clean = transcript.trim();
+    if (_cachedTranscript == clean && _cachedSegments.isNotEmpty) {
       return _cachedSegments;
     }
-    _cachedTranscript = transcript;
-    _cachedSegments = _parseTranscriptSegments(transcript);
+    _cachedTranscript = clean;
+    _cachedSegments = _parseTranscriptSegments(clean);
     return _cachedSegments;
   }
 
@@ -507,8 +511,7 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
                               vertical: 3.5,
                             ),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).brightness ==
-                                      Brightness.dark
+                              color: false
                                   ? Colors.white.withValues(alpha: 0.05)
                                   : Colors.black.withValues(alpha: 0.04),
                               borderRadius: BorderRadius.circular(12),
@@ -594,14 +597,68 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
         isNoSpeech;
 
     if (isStillLoading) {
-      return ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: _buildTopToggle(),
-          ),
-          const TranscriptSkeleton(),
-        ],
+      return RefreshIndicator(
+        onRefresh: () => _fetchFullDetails(meetingId ?? _getMeetingId()),
+        color: AppTheme.primaryColor,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: _buildTopToggle(),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Generating AI Transcript...',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Transcribing audio and identifying speakers. Transcript will update automatically.',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const TranscriptSkeleton(),
+          ],
+        ),
       );
     }
 
@@ -1571,7 +1628,39 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
     }
 
     final List<_TranscriptSegment> segments = [];
-    String currentSpeaker = "Speaker 1";
+
+    // Resolve attendee metadata to map any remaining generic speaker placeholders
+    List<Map<String, dynamic>> members = [];
+    final desc = (_fullMeeting?['description'] ?? '').toString();
+    if (desc.contains('[MEMBERS:')) {
+      members = RoomService.parseMembersFromDescription(desc);
+    }
+
+    String defaultSpeaker = '';
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      defaultSpeaker = ApiService.sanitizeDisplayName(
+        user.userMetadata?['full_name'] ?? user.userMetadata?['name'],
+        user.email,
+        fallback: '',
+      );
+    }
+    if (members.isNotEmpty) {
+      final hostMember = members.firstWhere((m) => m['is_host'] == true, orElse: () => members.first);
+      final mName = ApiService.sanitizeDisplayName(
+        (hostMember['name'] ?? '').toString(),
+        (hostMember['email'] ?? '').toString(),
+        fallback: '',
+      );
+      if (mName.isNotEmpty && mName.toLowerCase() != 'host') {
+        defaultSpeaker = mName;
+      }
+    }
+    if (defaultSpeaker.isEmpty) {
+      defaultSpeaker = 'You';
+    }
+
+    String currentSpeaker = defaultSpeaker;
     Color currentSpeakerColor = AppTheme.primaryColor;
 
     for (int i = 0; i < processedLines.length; i++) {
@@ -1598,11 +1687,57 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
 
       final colonIndex = cleanLine.indexOf(':');
       if (colonIndex != -1 && colonIndex < 50) {
-        final potentialSpeaker = cleanLine
+        String potentialSpeaker = cleanLine
             .substring(0, colonIndex)
             .trim()
             .replaceAll('[', '')
             .replaceAll(']', '');
+        final pLower = potentialSpeaker
+            .toLowerCase()
+            .replaceAll(' ', '')
+            .replaceAll('_', '')
+            .replaceAll('-', '');
+
+        final isPlaceholderSpeaker = pLower == 'host' ||
+            pLower == 'speaker' ||
+            pLower == 'member' ||
+            pLower == 'participant' ||
+            RegExp(r'^(speaker|guest|participant|member)\d+$').hasMatch(pLower);
+
+        if (isPlaceholderSpeaker) {
+          if (members.length == 1) {
+            final soloName = ApiService.sanitizeDisplayName(
+              members[0]['name']?.toString(),
+              members[0]['email']?.toString(),
+              fallback: defaultSpeaker,
+            );
+            potentialSpeaker = (soloName.isNotEmpty && soloName.toLowerCase() != 'host')
+                ? soloName
+                : defaultSpeaker;
+          } else if (members.length > 1) {
+            final numMatch = RegExp(r'\d+').firstMatch(potentialSpeaker);
+            if (numMatch != null) {
+              final idx = int.tryParse(numMatch.group(0)!) ?? 0;
+              final targetIdx = (idx == 0) ? 0 : (idx < members.length ? idx : (idx - 1) % members.length);
+              final memName = ApiService.sanitizeDisplayName(
+                members[targetIdx]['name']?.toString(),
+                members[targetIdx]['email']?.toString(),
+                fallback: '',
+              );
+              if (memName.isNotEmpty) potentialSpeaker = memName;
+            } else if (pLower == 'host') {
+              potentialSpeaker = defaultSpeaker;
+            }
+          } else {
+            potentialSpeaker = defaultSpeaker;
+          }
+        } else {
+          potentialSpeaker = ApiService.sanitizeDisplayName(
+            potentialSpeaker,
+            null,
+            fallback: potentialSpeaker,
+          );
+        }
         if (potentialSpeaker != currentSpeaker || i == 0) {
           currentSpeaker = potentialSpeaker;
           isNewSpeaker = true;

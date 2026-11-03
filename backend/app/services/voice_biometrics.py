@@ -44,18 +44,54 @@ def invalidate_enrolled_users_cache():
     _ENROLLED_USERS_CACHE = None
 
 
-def format_speaker_display_name(raw_name: str | None, email: str | None = None) -> str:
+_INVALID_SPEAKER_NAMES = {
+    "null",
+    "undefined",
+    "none",
+    "unknown",
+    "speaker",
+    "anonymous",
+    "host",
+    "guest",
+    "participant",
+    "member",
+}
+
+
+def is_generic_speaker_handle(name: str | None) -> bool:
+    """Checks whether a name is empty or an invalid placeholder like 'null', 'host', or 'speaker'."""
+    if not name or not name.strip():
+        return True
+    cleaned = (
+        name.strip().lower().replace("_", "").replace("-", "").replace(" ", "").replace(".", "")
+    )
+    if cleaned in _INVALID_SPEAKER_NAMES:
+        return True
+    for prefix in ("speaker", "guest", "participant", "member", "host"):
+        if cleaned.startswith(prefix) and (cleaned[len(prefix):].isdigit() or cleaned == prefix):
+            return True
+    return False
+
+
+def format_speaker_display_name(
+    raw_name: str | None, email: str | None = None, fallback: str = "Speaker"
+) -> str:
     """Formats user full name or email cleanly in Title Case for meeting transcripts."""
-    if raw_name and raw_name.strip():
+    if raw_name and raw_name.strip() and not is_generic_speaker_handle(raw_name):
         parts = [p.capitalize() for p in raw_name.strip().split() if p]
         if parts:
             return " ".join(parts)
-    if email and email.strip():
-        username = email.strip().split("@")[0].replace(".", " ").replace("_", " ").replace("-", " ")
-        parts = [p.capitalize() for p in username.split() if p]
-        if parts:
-            return " ".join(parts)
-    return "Speaker"
+
+    if email and email.strip() and "@" in email:
+        username = (
+            email.strip().split("@")[0].replace(".", " ").replace("_", " ").replace("-", " ")
+        )
+        if not is_generic_speaker_handle(username):
+            parts = [p.capitalize() for p in username.split() if p]
+            if parts:
+                return " ".join(parts)
+
+    return fallback
 
 
 class VoiceBiometricsService:
@@ -144,12 +180,15 @@ class VoiceBiometricsService:
 
     def _compute_embedding(self, waveform: torch.Tensor) -> np.ndarray | None:
         """Computes 192-dim embedding with inference_mode to avoid gradient graphs
-
         and minimize memory usage. Returns NumPy array directly.
         """
         # Minimum sample requirement (0.2s at 16kHz = 3200 samples)
         if waveform.shape[1] < 3200:
             return None
+
+        # Truncate to optimal 6-second window (96,000 samples) for ultra-fast inference
+        if waveform.shape[1] > 96000:
+            waveform = waveform[:, :96000]
 
         cls = self.classifier
         if cls is None:
@@ -163,21 +202,6 @@ class VoiceBiometricsService:
         """Takes raw audio bytes, converts to 192-dim embedding list for database storage."""
         waveform = self._load_and_normalize_audio(audio_bytes)
         emb = self._compute_embedding(waveform)
-        return emb.tolist() if emb is not None else []
-
-    def extract_embedding_from_segment(
-        self, audio_bytes: bytes, start_sec: float, end_sec: float
-    ) -> list[float]:
-        """Extracts an embedding from a specific time slice."""
-        waveform = self._load_and_normalize_audio(audio_bytes)
-        start_sample = max(0, int(start_sec * 16000))
-        end_sample = min(waveform.shape[1], int(end_sec * 16000))
-
-        if start_sample >= end_sample:
-            return []
-
-        sliced = waveform[:, start_sample:end_sample]
-        emb = self._compute_embedding(sliced)
         return emb.tolist() if emb is not None else []
 
     def extract_embeddings_for_speaker_segments(
@@ -316,7 +340,7 @@ class VoiceBiometricsService:
                 matched_user = valid_users[u_idx]
                 raw_name = matched_user.get("full_name") or matched_user.get("name")
                 display_name = format_speaker_display_name(
-                    raw_name, matched_user.get("email")
+                    raw_name, matched_user.get("email"), fallback=f"Speaker {spk_id + 1}"
                 )
                 speaker_name_map[spk_id] = display_name
                 assigned_speakers.add(spk_id)

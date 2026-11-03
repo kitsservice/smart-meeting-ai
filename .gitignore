@@ -17,6 +17,8 @@ backend/.pytest_cache/
 backend/.ruff_cache/
 backend/temp_audio/
 backend/saved_audio/
+temp_audio/
+saved_audio/
 backend/pretrained_models/
 pretrained_models/
 backend/.env
@@ -40,3 +42,5 @@ frontend/.flutter-plugins-dependencies
 *.aab
 *.apk
 *.pem
+playstore_feature_graphic*.jpg
+playstore_feature_graphic*.png

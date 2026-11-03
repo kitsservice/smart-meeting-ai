@@ -1,5 +1,7 @@
 import hashlib
 import logging
+import re
+from pathlib import Path
 
 import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -8,7 +10,9 @@ from supabase import Client
 
 from app.db.supabase import get_supabase_client
 from app.services.voice_biometrics import (
+    format_speaker_display_name,
     invalidate_enrolled_users_cache,
+    is_generic_speaker_handle,
     voice_biometrics,
 )
 
@@ -63,13 +67,29 @@ async def enroll_voice(
             logger.info("Generating fallback normalized voice signature for user %s", user_id)
             seed = int(hashlib.sha256(audio_bytes).hexdigest()[:8], 16)
             rng = np.random.default_rng(seed)
-            embedding = (rng.standard_normal(192).astype(np.float32) * 5.0).tolist()
+            vec = rng.standard_normal(192).astype(np.float32)
+            norm = float(np.linalg.norm(vec))
+            if norm > 1e-9:
+                vec = vec / norm
+            embedding = vec.tolist()
             quality = "synthesized"
 
         # 2. Clean and format full name in proper Title Case (e.g., 'Rahul Sharma')
         clean_name: str | None = None
-        if full_name and full_name.strip():
-            clean_name = " ".join(p.capitalize() for p in full_name.strip().split() if p)
+        if full_name and full_name.strip() and not is_generic_speaker_handle(full_name):
+            cand = " ".join(p.capitalize() for p in full_name.strip().split() if p)
+            if not is_generic_speaker_handle(cand):
+                clean_name = cand
+
+        if not clean_name:
+            try:
+                user_record = db.table("users").select("full_name, email").eq("id", user_id).execute()
+                if user_record and user_record.data:
+                    u_cand = user_record.data[0].get("full_name") or user_record.data[0].get("email")
+                    if u_cand:
+                        clean_name = format_speaker_display_name(u_cand)
+            except Exception:
+                pass
 
         upsert_data: dict[str, object] = {
             "id": user_id,
@@ -158,14 +178,29 @@ async def enroll_voice_multi(
             # Fallback if SpeechBrain is not loaded
             seed = int(hashlib.sha256(all_bytes[0]).hexdigest()[:8], 16)
             rng = np.random.default_rng(seed)
-            emb = (rng.standard_normal(192).astype(np.float32) * 5.0).tolist()
-            return emb, "synthesized", 1
+            vec = rng.standard_normal(192).astype(np.float32)
+            norm = float(np.linalg.norm(vec))
+            if norm > 1e-9:
+                vec = vec / norm
+            return vec.tolist(), "synthesized", 1
 
         embedding, quality, sample_count = await run_in_threadpool(extract_centroid)
 
         clean_name: str | None = None
-        if full_name and full_name.strip():
-            clean_name = " ".join(p.capitalize() for p in full_name.strip().split() if p)
+        if full_name and full_name.strip() and not is_generic_speaker_handle(full_name):
+            cand = " ".join(p.capitalize() for p in full_name.strip().split() if p)
+            if not is_generic_speaker_handle(cand):
+                clean_name = cand
+
+        if not clean_name:
+            try:
+                user_record = db.table("users").select("full_name, email").eq("id", user_id).execute()
+                if user_record and user_record.data:
+                    u_cand = user_record.data[0].get("full_name") or user_record.data[0].get("email")
+                    if u_cand:
+                        clean_name = format_speaker_display_name(u_cand)
+            except Exception:
+                pass
 
         upsert_data: dict[str, object] = {
             "id": user_id,
@@ -229,8 +264,8 @@ async def verify_voice(
         )
 
     stored_emb = user_profile["voice_embedding"]
-    display_name = (
-        user_profile.get("full_name") or user_profile.get("email", "User").split("@")[0]
+    display_name = format_speaker_display_name(
+        user_profile.get("full_name"), user_profile.get("email"), fallback="User"
     )
 
     # 2. Extract embedding from test audio
@@ -275,15 +310,33 @@ async def verify_voice(
 
 
 @router.delete("/{user_id}")
-def delete_user_account(user_id: str, db: Client = Depends(get_db)):
-    """Delete a user account and all their data (executed in threadpool)"""
+def delete_user_account(
+    user_id: str,
+    caller_id: str | None = None,
+    db: Client = Depends(get_db),
+):
+    """Delete a user account and all their data with caller verification"""
+    safe_uid = Path(user_id).name
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", safe_uid):
+        raise HTTPException(status_code=400, detail="Invalid user_id format")
+
+    if not caller_id or caller_id.strip() != safe_uid:
+        raise HTTPException(
+            status_code=403, detail="Access denied: Cannot delete another user's account"
+        )
+
     try:
         # Delete from public table
-        db.table("users").delete().eq("id", user_id).execute()
-        # Delete from auth
-        db.auth.admin.delete_user(user_id)
+        db.table("users").delete().eq("id", safe_uid).execute()
+        # Delete from auth if admin client available
+        try:
+            db.auth.admin.delete_user(safe_uid)
+        except Exception:
+            pass
         invalidate_enrolled_users_cache()
         return {"status": "success", "message": "Account deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting user {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete account.") from e

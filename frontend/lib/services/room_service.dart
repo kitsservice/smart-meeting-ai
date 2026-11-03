@@ -176,9 +176,9 @@ class RoomService {
 
     final currentUser = Supabase.instance.client.auth.currentUser;
     final userId = hostId ?? (currentUser?.id ?? '00000000-0000-0000-0000-000000000000');
-    final name = hostName ??
-        (currentUser?.userMetadata?['full_name'] ??
-            (currentUser?.email?.split('@')[0] ?? 'Host'));
+    final name = (hostName != null && hostName.isNotEmpty && hostName != 'Host')
+        ? hostName
+        : await ApiService.resolveCurrentUserDisplayName();
 
     final membersJson = jsonEncode([
       {
@@ -287,7 +287,7 @@ class RoomService {
   static List<Map<String, dynamic>> parseMembersFromDescription(String desc) {
     if (!desc.contains('[MEMBERS:')) return [];
     try {
-      final match = RegExp(r'\[MEMBERS:(\[.*?\])\]').firstMatch(desc);
+      final match = RegExp(r'\[MEMBERS:(\[.*?\])\]', dotAll: true).firstMatch(desc);
       if (match != null && match.group(1) != null) {
         final decoded = jsonDecode(match.group(1)!);
         if (decoded is List) {

@@ -83,7 +83,7 @@ class _RatingBottomSheetState extends State<_RatingBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const isDark = false;
 
     return Container(
       decoration: BoxDecoration(

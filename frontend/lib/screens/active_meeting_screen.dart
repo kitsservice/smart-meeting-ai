@@ -82,9 +82,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
 
   Widget _buildVoiceCalibrationBanner() {
     final user = Supabase.instance.client.auth.currentUser;
-    final displayName = user?.userMetadata?['full_name'] ??
-        user?.userMetadata?['name'] ??
-        (user?.email?.split('@')[0] ?? 'You');
+    final displayName = ApiService.sanitizeDisplayName(
+      user?.userMetadata?['full_name'] ?? user?.userMetadata?['name'],
+      user?.email,
+      fallback: 'You',
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -261,8 +263,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
         _animationController.stop();
 
         final user = Supabase.instance.client.auth.currentUser;
-        final currentUserName = user?.userMetadata?['full_name'] ??
-            (user?.email?.split('@')[0] ?? 'You');
+        final currentUserName = ApiService.sanitizeDisplayName(
+          user?.userMetadata?['full_name'] ?? user?.userMetadata?['name'],
+          user?.email,
+          fallback: 'You',
+        );
         _triggerFloatingJoinBanner('$currentUserName (You)');
 
         if (code != null) {
@@ -280,8 +285,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
             (100000 + (DateTime.now().millisecondsSinceEpoch % 900000))
                 .toString();
         final user = Supabase.instance.client.auth.currentUser;
-        final hostName = user?.userMetadata?['full_name'] ??
-            (user?.email?.split('@')[0] ?? 'Host');
+        final hostName = ApiService.sanitizeDisplayName(
+          user?.userMetadata?['full_name'] ?? user?.userMetadata?['name'],
+          user?.email,
+          fallback: 'User',
+        );
         final hostId =
             user?.id ?? 'user_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -317,9 +325,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
       final user = Supabase.instance.client.auth.currentUser;
       final currentUserId =
           user?.id ?? 'user_${DateTime.now().millisecondsSinceEpoch}';
-      final currentUserName =
-          user?.userMetadata?['full_name'] ??
-          (user?.email?.split('@')[0] ?? 'Host');
+      final currentUserName = ApiService.sanitizeDisplayName(
+        user?.userMetadata?['full_name'] ?? user?.userMetadata?['name'],
+        user?.email,
+        fallback: 'User',
+      );
       await _roomChannel?.track({
         'user_id': currentUserId,
         'name': currentUserName,
@@ -673,9 +683,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     final user = Supabase.instance.client.auth.currentUser;
     final currentUserId =
         user?.id ?? 'user_${DateTime.now().millisecondsSinceEpoch}';
-    final currentUserName =
-        user?.userMetadata?['full_name'] ??
-        (user?.email?.split('@')[0] ?? (isParticipant ? 'Member' : 'Host'));
+    final currentUserName = ApiService.sanitizeDisplayName(
+      user?.userMetadata?['full_name'] ?? user?.userMetadata?['name'],
+      user?.email,
+      fallback: 'User',
+    );
 
     final Map<String, Map<String, dynamic>> map = {};
 
@@ -744,9 +756,11 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
       final user = Supabase.instance.client.auth.currentUser;
       final currentUserId =
           user?.id ?? 'user_${DateTime.now().millisecondsSinceEpoch}';
-      final currentUserName =
-          user?.userMetadata?['full_name'] ??
-          (user?.email?.split('@')[0] ?? (isParticipant ? 'Member' : 'Host'));
+      final currentUserName = ApiService.sanitizeDisplayName(
+        user?.userMetadata?['full_name'] ?? user?.userMetadata?['name'],
+        user?.email,
+        fallback: 'User',
+      );
 
       // Populate current user immediately
       _updateParticipants([]);
@@ -1228,9 +1242,156 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
+  Future<bool> _confirmLeaveParticipant() async {
+    HapticFeedback.mediumImpact();
+    final bool? shouldLeave = await showModalBottomSheet<bool>(
+      context: context,
+      isDismissible: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: Container(
+              padding: EdgeInsets.only(
+                top: 24,
+                left: 24,
+                right: 24,
+                bottom: MediaQuery.of(sheetContext).padding.bottom + 24,
+              ),
+              decoration: const BoxDecoration(
+                color: AppTheme.darkSurface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.white12,
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.dangerColor.withValues(alpha: 0.15),
+                      border: Border.all(
+                        color: AppTheme.dangerColor.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.logout_rounded,
+                      color: AppTheme.dangerColor,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Leave Meeting?',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    roomCode != null
+                        ? 'Are you sure you want to exit Room $roomCode? You will be disconnected from this session.'
+                        : 'Are you sure you want to exit? You will leave this meeting session.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      // No / Stay Button
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(sheetContext, false),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 1.5,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'No, Stay',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Yes / Exit Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(sheetContext, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.dangerColor,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 4,
+                          ),
+                          icon: const Icon(
+                            Icons.exit_to_app_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          label: const Text(
+                            'Yes, Exit',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return shouldLeave ?? false;
+  }
+
   Future<void> endMeeting() async {
     HapticFeedback.mediumImpact();
     if (isParticipant) {
+      final confirmed = await _confirmLeaveParticipant();
+      if (!confirmed) return;
       _recordingService.reset();
       MeetingForegroundService().stopService();
       if (mounted) Navigator.pop(context);
@@ -1400,6 +1561,33 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     if (shouldSave == true && savedPath != null) {
       String meetingDescription =
           "Recorded for ${_formatDuration(_recordDuration)}";
+
+      // Ensure user's real display name is resolved before serializing participant metadata
+      final realUserName = await ApiService.resolveCurrentUserDisplayName();
+      final user = Supabase.instance.client.auth.currentUser;
+      final currentUserId = user?.id ?? 'user_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (_participants.isEmpty) {
+        _participants = [
+          {
+            'user_id': currentUserId,
+            'name': realUserName,
+            'email': user?.email,
+            'is_host': true,
+            'joined_at': DateTime.now().toIso8601String(),
+          }
+        ];
+      } else {
+        for (final p in _participants) {
+          if (p['user_id'] == currentUserId || p['is_host'] == true) {
+            final pName = (p['name'] ?? '').toString();
+            if (pName.isEmpty || pName == 'Host' || pName == 'Member' || pName == 'User') {
+              p['name'] = realUserName;
+            }
+          }
+        }
+      }
+
       if (roomCode != null) {
         final dbMembers = await RoomService().getRoomParticipants(roomCode!);
         if (dbMembers.isNotEmpty) {
@@ -1516,7 +1704,15 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     }
   }
 
-  void _handleBackPress() {
+  Future<void> _handleBackPress() async {
+    if (isParticipant) {
+      final confirmed = await _confirmLeaveParticipant();
+      if (!confirmed) return;
+      _recordingService.reset();
+      MeetingForegroundService().stopService();
+      if (mounted) Navigator.pop(context);
+      return;
+    }
     if (mounted) {
       Navigator.pop(context);
     }
@@ -1530,10 +1726,17 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
     final displayTitle = args?['title'] ?? 'Live Meeting';
 
     return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        // Allows popping smoothly to HomeScreen inside the app!
-        // No permission card, no modal, no throwing out of the app.
+      canPop: !isParticipant,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (isParticipant) {
+          final confirmed = await _confirmLeaveParticipant();
+          if (confirmed && context.mounted) {
+            _recordingService.reset();
+            MeetingForegroundService().stopService();
+            Navigator.of(context).pop();
+          }
+        }
       },
       child: Scaffold(
         backgroundColor: AppTheme.darkSurface,
@@ -2193,56 +2396,59 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                               },
                                             ),
                                           ),
-                                          // Central Mic Button (Glassmorphism)
-                                          Container(
-                                            width: 96,
-                                            height: 96,
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  const BorderRadius.all(
-                                                Radius.circular(999),
-                                              ),
-                                              color: Colors.white.withValues(
-                                                alpha: 0.05,
-                                              ),
-                                              border: Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.1,
+                                          // Central Mic Button (Glassmorphism) with interactive Tap-to-Pause/Resume
+                                          GestureDetector(
+                                            onTap: !isParticipant ? _pauseOrResumeRecording : null,
+                                            child: Container(
+                                              width: 96,
+                                              height: 96,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    const BorderRadius.all(
+                                                  Radius.circular(999),
                                                 ),
-                                                width: 1.5,
-                                              ),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: AppTheme.primaryColor
-                                                      .withValues(
-                                                    alpha: isRecording
-                                                        ? (0.2 +
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.05,
+                                                ),
+                                                border: Border.all(
+                                                  color: Colors.white.withValues(
+                                                    alpha: 0.1,
+                                                  ),
+                                                  width: 1.5,
+                                                ),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: AppTheme.primaryColor
+                                                        .withValues(
+                                                      alpha: isRecording
+                                                          ? (0.2 +
+                                                              (_recordingService
+                                                                      .currentAmplitude *
+                                                                  0.3))
+                                                          : 0.1,
+                                                    ),
+                                                    blurRadius: isRecording
+                                                        ? (25 +
                                                             (_recordingService
                                                                     .currentAmplitude *
-                                                                0.3))
-                                                        : 0.1,
+                                                                20))
+                                                        : 16,
+                                                    spreadRadius: isRecording
+                                                        ? (4 +
+                                                            (_recordingService
+                                                                    .currentAmplitude *
+                                                                6))
+                                                        : 2,
                                                   ),
-                                                  blurRadius: isRecording
-                                                      ? (25 +
-                                                          (_recordingService
-                                                                  .currentAmplitude *
-                                                              20))
-                                                      : 16,
-                                                  spreadRadius: isRecording
-                                                      ? (4 +
-                                                          (_recordingService
-                                                                  .currentAmplitude *
-                                                              6))
-                                                      : 2,
-                                                ),
-                                              ],
-                                            ),
-                                            child: Icon(
-                                              isRecording
-                                                  ? Icons.mic_rounded
-                                                  : Icons.mic_off_rounded,
-                                              color: Colors.white,
-                                              size: 40,
+                                                ],
+                                              ),
+                                              child: Icon(
+                                                isRecording
+                                                    ? Icons.mic_rounded
+                                                    : Icons.mic_off_rounded,
+                                                color: Colors.white,
+                                                size: 40,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -2268,6 +2474,19 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                                           },
                                         ),
                                       ),
+                                      if (!isParticipant) ...[
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          isRecording
+                                              ? 'Tap mic to pause'
+                                              : 'Tap mic or Resume below to continue',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.55),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 )),
@@ -2287,7 +2506,7 @@ class _ActiveMeetingScreenState extends ConsumerState<ActiveMeetingScreen>
                       height: 50,
                       child: isParticipant
                           ? OutlinedButton.icon(
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: _handleBackPress,
                               icon: const Icon(
                                 Icons.exit_to_app_rounded,
                                 color: Colors.white70,

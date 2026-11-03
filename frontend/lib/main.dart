@@ -80,8 +80,8 @@ class SmartMeetingApp extends StatelessWidget {
     return MaterialApp(
       title: 'Smart Meeting',
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      darkTheme: AppTheme.lightTheme,
+      themeMode: ThemeMode.light,
       debugShowCheckedModeBanner: false,
       initialRoute: '/splash',
       routes: {

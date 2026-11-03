@@ -174,7 +174,7 @@ Recorded note"""
     assert res_anon[1] == "Speaker 2"
     print("[PASS] Fallback to 'Speaker 1', 'Speaker 2' only occurs when 0 attendees are known.")
 
-    print("--- 10. Testing Single Attendee with Multiple Distinct Voices in Audio ---")
+    print("--- 10. Testing Single Attendee with Multiple Diarized Segments ---")
     single_host_att = [{"id": "u1", "name": "Arjun Sharma", "is_host": True}]
     multi_voice_segments = [
         {"speaker_id": 0, "start": 0.0, "end": 4.0, "text": "I am hosting this meeting."},
@@ -182,16 +182,16 @@ Recorded note"""
             "speaker_id": 1,
             "start": 4.5,
             "end": 8.0,
-            "text": "I am speaking from the other side of the room.",
+            "text": "Deepgram assigned speaker 1 across a pause or tone variation.",
         },
     ]
     res_multi = resolve_speaker_names_deterministic(
         segments=multi_voice_segments, attendees=single_host_att
     )
     assert res_multi[0] == "Arjun Sharma", f"Expected 'Arjun Sharma', got {res_multi.get(0)}"
-    assert res_multi[1] == "Guest 1", f"Expected 'Guest 1', got {res_multi.get(1)}"
+    assert res_multi[1] == "Arjun Sharma", f"Expected 'Arjun Sharma', got {res_multi.get(1)}"
     print(
-        "[PASS] Multi-voice audio in single-attendee room correctly preserves distinct identities!"
+        "[PASS] Multiple diarized segments in single-attendee room accurately preserve user's real name!"
     )
 
     print("--- 11. Testing Conversational Turn Splitting for Multi-Attendee Meeting ---")
