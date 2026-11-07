@@ -154,13 +154,15 @@ class OfflineQueueService {
               );
               await prefs.setStringList(notifsKey, notifs);
 
-              // Clean up temporary audio file after successful cloud ingestion
-              try {
-                final file = File(filePath);
-                if (file.existsSync()) {
-                  file.deleteSync();
-                }
-              } catch (_) {}
+              // Clean up temporary audio file after background cloud sync has completed
+              Future.delayed(const Duration(seconds: 25), () {
+                try {
+                  final file = File(filePath);
+                  if (file.existsSync()) {
+                    file.deleteSync();
+                  }
+                } catch (_) {}
+              });
             } else {
               debugPrint('Audio upload failed for meeting $meetingId. Keeping in queue to retry.');
               remainingQueue.add(jsonEncode(data)); // Keep with saved meetingId to retry upload!

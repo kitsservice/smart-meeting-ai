@@ -56,6 +56,7 @@ class ApiService {
     // Include local development loopback addresses
     if (!kReleaseMode) {
       const devDefaults = [
+        'http://192.168.2.102:8000/api/v1',
         'http://127.0.0.1:8000/api/v1',
         'http://10.0.2.2:8000/api/v1',
         'http://192.168.1.17:8000/api/v1',
@@ -481,7 +482,7 @@ class ApiService {
               'user_id': userId,
             }),
           )
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -531,27 +532,34 @@ class ApiService {
       } catch (_) {}
     }
 
-    // 1. High-speed Direct Client-Side Deepgram Nova-3 Transcription:
-    // Transcribes audio in ~1.8 seconds directly, generates native AI summary and speaker labels,
-    // and saves straight to Supabase. This delivers instant results ("within seconds")!
-    debugPrint('Executing rapid direct Deepgram Nova-3 transcription for meeting $meetingId...');
+    // 1. Instant Direct Client-Side Deepgram Nova-3 Transcription:
+    // Calls Deepgram directly to transcribe in ~1.8 seconds, formats speaker labels,
+    // generates native AI summary, and saves directly to Supabase. Instant results!
+    debugPrint('Executing rapid direct Deepgram transcription for meeting $meetingId...');
     final directSuccess = await _processAudioDirectDeepgram(
       meetingId,
       filePath,
       language: selectedLang,
     );
 
-    // Sync audio file to cloud backend asynchronously for persistent playback storage
-    unawaited(_uploadAudioToBackend(meetingId, filePath, selectedLang));
-
     if (directSuccess) {
       debugPrint('Rapid direct transcription succeeded for $meetingId within seconds!');
+      // Sync audio file to cloud backend asynchronously for persistent playback storage
+      unawaited(_uploadAudioToBackend(meetingId, filePath, selectedLang));
       return true;
     }
 
-    // 2. Resilient Cloud Backend Fallback (if direct Deepgram network failed)
-    debugPrint('Direct Deepgram failed, awaiting cloud backend processing...');
-    return await _uploadAudioToBackend(meetingId, filePath, selectedLang);
+    // 2. Resilient Cloud Backend Fallback:
+    // If direct Deepgram did not detect speech or network dropped, fallback to backend processing
+    debugPrint('Direct Deepgram did not yield speech, falling back to cloud backend processing...');
+    final backendSuccess = await _uploadAudioToBackend(meetingId, filePath, selectedLang);
+    if (backendSuccess) {
+      debugPrint('Cloud Backend successfully received and queued audio for meeting $meetingId');
+      return true;
+    }
+
+    debugPrint('Both direct transcription and backend upload failed. Retaining in offline queue.');
+    return false;
   }
 
   Future<bool> _uploadAudioToBackend(
@@ -570,8 +578,10 @@ class ApiService {
         );
 
         try {
-          final isAlive = await _isBaseUrlAlive(base);
-          if (!isAlive) continue;
+          if (_cachedBaseUrl != base && _isLocalAddress(base)) {
+            final isAlive = await _isBaseUrlAlive(base);
+            if (!isAlive) continue;
+          }
 
           var request = http.MultipartRequest('POST', url);
           request.headers.addAll(_getHeaders(isMultipart: true));
@@ -641,34 +651,54 @@ class ApiService {
         mimeType = 'audio/aac';
       } else if (lower.endsWith('.ogg')) {
         mimeType = 'audio/ogg';
+      } else if (lower.endsWith('.m4a')) {
+        mimeType = 'audio/m4a';
       }
 
-      // Construct Deepgram Nova-3 API call
-      String langParam = '';
+      // Construct Deepgram API call with valid model & language parameters
+      String queryParams = 'smart_format=true&diarize=true&punctuate=true';
       final normLang = (language ?? '').toLowerCase();
       if (normLang.contains('hindi') || normLang == 'hi') {
-        langParam = '&language=hi';
+        queryParams += '&model=nova-3&language=hi';
       } else if (normLang.contains('marathi') || normLang == 'mr') {
-        langParam = '&language=mr';
+        queryParams += '&model=general&language=mr';
       } else if (normLang.contains('english') || normLang == 'en') {
-        langParam = '&language=en';
+        queryParams += '&model=nova-3&language=en&summarize=v2';
+      } else {
+        // Nova-2 provides comprehensive multi-language auto-detection across Indian languages
+        queryParams += '&model=nova-2&detect_language=true';
       }
 
-      final uri = Uri.parse(
-        'https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&diarize=true&punctuate=true&summarize=v2$langParam',
-      );
+      final uri = Uri.parse('https://api.deepgram.com/v1/listen?$queryParams');
 
       final dgKey = _getEnv('DEEPGRAM_API_KEY')?.trim().isNotEmpty == true
           ? _getEnv('DEEPGRAM_API_KEY')!.trim()
           : 'b7640f6737a95fe71401c14e2d78bff12c77a200';
-      final response = await http.post(
+      var response = await http.post(
         uri,
         headers: {
           'Authorization': 'Token $dgKey',
           'Content-Type': mimeType,
         },
         body: bytes,
-      ).timeout(const Duration(seconds: 35));
+      ).timeout(const Duration(seconds: 15));
+
+      // Resilient fallback: If the primary model/tier combination returned an error,
+      // fall back to Nova-2 multi-language auto-detect
+      if (response.statusCode != 200) {
+        debugPrint('Direct Deepgram first attempt (${response.statusCode}) error: ${response.body}. Retrying with Nova-2 fallback...');
+        final fallbackUri = Uri.parse(
+          'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&diarize=true&punctuate=true&detect_language=true',
+        );
+        response = await http.post(
+          fallbackUri,
+          headers: {
+            'Authorization': 'Token $dgKey',
+            'Content-Type': mimeType,
+          },
+          body: bytes,
+        ).timeout(const Duration(seconds: 15));
+      }
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -676,6 +706,12 @@ class ApiService {
         if (channels != null && channels.isNotEmpty) {
           final alt = channels[0]['alternatives']?[0];
           final rawTranscript = (alt?['transcript'] as String? ?? '').trim();
+          if (rawTranscript.isEmpty ||
+              rawTranscript.toLowerCase() == 'no speech detected.' ||
+              rawTranscript.split(RegExp(r'\s+')).length < 2) {
+            debugPrint('Direct Deepgram: No valid speech detected in response. Yielding to backend processing.');
+            return false;
+          }
 
           // Build speaker-labeled transcript if paragraphs exist
           String formattedTranscript = rawTranscript;
@@ -763,19 +799,17 @@ class ApiService {
           }
 
           if (formattedTranscript.isEmpty) {
-            formattedTranscript = rawTranscript.isNotEmpty ? rawTranscript : 'No speech detected.';
+            formattedTranscript = rawTranscript;
           }
 
           // Extract native Deepgram AI Summary or generate contextual fallback
           final deepgramAiSummary = (data['results']?['summary']?['short'] as String? ?? '').trim();
           String summary = deepgramAiSummary;
           if (summary.isEmpty) {
-            if (formattedTranscript.length > 30 && formattedTranscript != 'No speech detected.') {
+            if (formattedTranscript.length > 30) {
               final words = formattedTranscript.split(RegExp(r'\s+'));
               final preview = words.take(60).join(' ');
               summary = 'Meeting Discussion Summary:\n$preview...';
-            } else if (formattedTranscript == 'No speech detected.') {
-              summary = 'No speech was detected in this recording.';
             } else {
               summary = 'Meeting recording captured and transcribed.';
             }
@@ -811,6 +845,8 @@ class ApiService {
           }).eq('id', meetingId);
 
           debugPrint('Direct Deepgram: Successfully saved transcript to Supabase for $meetingId');
+          // Sync audio file to cloud backend asynchronously for persistent playback storage
+          unawaited(_uploadAudioToBackend(meetingId, filePath, language ?? ''));
           return true;
         }
       } else {
@@ -856,8 +892,19 @@ class ApiService {
           .maybeSingle();
       if (res == null) return false;
       final embedding = res['voice_embedding'];
-      final bool hasEmbedding = embedding != null &&
-          (embedding is List && embedding.length == 192);
+      bool hasEmbedding = false;
+      if (embedding is List && embedding.length == 192) {
+        hasEmbedding = true;
+      } else if (embedding is String && embedding.startsWith('[') && embedding.endsWith(']')) {
+        try {
+          final decoded = jsonDecode(embedding);
+          hasEmbedding = decoded is List && decoded.length == 192;
+        } catch (_) {}
+      } else if (res['voice_profile_url'] != null &&
+          (res['voice_profile_url'].toString().contains('enrolled') ||
+              res['voice_profile_url'].toString().contains('http'))) {
+        hasEmbedding = true;
+      }
       return hasEmbedding;
     } catch (e) {
       debugPrint('Error checking voice calibration: $e');
@@ -908,10 +955,10 @@ class ApiService {
         // Attach the audio file
         request.files.add(await http.MultipartFile.fromPath('file', filePath));
 
-        // Snappy responsive timeout: 12 seconds max per attempt
+        // Generous timeout to allow neural embedding extraction on cloud servers
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 12));
+            .timeout(const Duration(seconds: 35));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {
@@ -968,7 +1015,15 @@ class ApiService {
           upsertData['full_name'] = fullName;
         }
 
-        await Supabase.instance.client.from('users').upsert(upsertData);
+        try {
+          await Supabase.instance.client.from('users').update({
+            'voice_embedding': normalized,
+            'voice_profile_url': 'enrolled_in_ai',
+            if (fullName.isNotEmpty) 'full_name': fullName,
+          }).eq('id', userId);
+        } catch (_) {
+          await Supabase.instance.client.from('users').upsert(upsertData);
+        }
         debugPrint(
           'Direct Supabase voice enrollment fallback succeeded cleanly for user: $userId',
         );
@@ -1030,7 +1085,7 @@ class ApiService {
 
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 12));
+            .timeout(const Duration(seconds: 45));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {
@@ -1080,7 +1135,7 @@ class ApiService {
 
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 30));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {

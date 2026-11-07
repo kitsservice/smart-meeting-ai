@@ -21,24 +21,8 @@ logger = logging.getLogger("uvicorn.info")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup actions: asynchronously pre-warm voice biometrics and vector embedding models
-    # so first-time user calibration and similarity checks execute instantaneously without cold starts.
-    async def _prewarm_models():
-        try:
-            from app.services.voice_biometrics import voice_biometrics
-            _ = voice_biometrics.classifier
-            logger.info("SpeechBrain Voice Biometrics model pre-warmed successfully.")
-        except Exception as e:
-            logger.warning("Voice biometrics model pre-warm skipped/failed: %s", e)
-
-        try:
-            from app.services.vector_search import get_embedding_model
-            _ = get_embedding_model()
-            logger.info("SentenceTransformer embedding model pre-warmed successfully.")
-        except Exception as e:
-            logger.warning("Vector search model pre-warm skipped/failed: %s", e)
-
-    asyncio.create_task(run_in_threadpool(_prewarm_models))
+    # Startup actions: lightweight initialization to prevent OOM on 512MB RAM environments
+    logger.info("Smart Meeting AI Backend starting up cleanly...")
     yield
     # Shutdown actions: gracefully close HTTP sessions
     await deepgram_service.aclose()
@@ -81,8 +65,11 @@ def root():
 def health():
     return {
         "status": "healthy",
-        "version": "2.0.3",
+        "version": "2.0.4",
         "supabase_configured": bool(settings.SUPABASE_URL and settings.SUPABASE_KEY),
+        "deepgram_configured": bool(settings.DEEPGRAM_API_KEY),
+        "gemini_configured": bool(settings.GEMINI_API_KEY),
+        "sarvam_configured": bool(settings.SARVAM_API_KEY),
     }
 
 

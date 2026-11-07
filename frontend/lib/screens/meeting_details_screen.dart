@@ -66,7 +66,9 @@ class _MeetingDetailsScreenState extends ConsumerState<MeetingDetailsScreen> {
             updated != 'null' &&
             updated != 'NONE' &&
             updated != 'Loading transcript...' &&
-            updated != 'No transcript available.') {
+            updated != 'No transcript available.' &&
+            updated != 'No speech detected.' &&
+            updated != 'Transcription could not be completed.') {
           timer.cancel();
           ref.read(meetingsProvider.notifier).fetchMeetings();
         }

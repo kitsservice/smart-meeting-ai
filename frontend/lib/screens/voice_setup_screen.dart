@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -112,6 +113,8 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     if (_isRecording || _isTestingVoice) return;
     setState(() {
       _selectedLanguage = lang;
+      _currentStep = 1;
+      _capturedSamples.clear();
       _loadStepPhrase();
       _hasRecordedCurrentStep = false;
       _recordedFilePath = null;
@@ -191,13 +194,13 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
           if (mounted) {
             setState(() {
               _recordSeconds++;
-              final targetWords = (_recordSeconds * 2.2).toInt();
+              final targetWords = (_recordSeconds * 1.4).toInt();
               if (_highlightedWordIndex < targetWords && _highlightedWordIndex < _words.length) {
                 _highlightedWordIndex = targetWords.clamp(0, _words.length);
               }
             });
 
-            if ((_recordSeconds >= 3 && _highlightedWordIndex >= _words.length) || _recordSeconds >= 6) {
+            if ((_recordSeconds >= 5 && _highlightedWordIndex >= _words.length) || _recordSeconds >= 10) {
               _toggleRecording();
             }
           }
@@ -245,7 +248,12 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
       return;
     }
 
-    _capturedSamples.add(_recordedFilePath!);
+    final stepIndex = _currentStep - 1;
+    if (_capturedSamples.length > stepIndex) {
+      _capturedSamples[stepIndex] = _recordedFilePath!;
+    } else {
+      _capturedSamples.add(_recordedFilePath!);
+    }
 
     if (!finishEarly && _currentStep < 3) {
       // Advance to next step
@@ -269,7 +277,11 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        final enrolled = await ApiService().enrollVoiceMulti(_capturedSamples);
+        final samplesToSend = _capturedSamples.where((p) => File(p).existsSync()).toList();
+        if (samplesToSend.isEmpty && _recordedFilePath != null && File(_recordedFilePath!).existsSync()) {
+          samplesToSend.add(_recordedFilePath!);
+        }
+        final enrolled = await ApiService().enrollVoiceMulti(samplesToSend);
 
         if (!enrolled) {
           if (mounted) {
@@ -388,7 +400,7 @@ class _VoiceSetupScreenState extends State<VoiceSetupScreen>
         _timer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (mounted) {
             setState(() => _recordSeconds++);
-            if (_recordSeconds >= 6) {
+            if (_recordSeconds >= 10) {
               _toggleVoiceTest();
             }
           }

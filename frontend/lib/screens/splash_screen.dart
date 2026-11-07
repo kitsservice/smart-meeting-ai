@@ -49,10 +49,10 @@ class _SplashScreenState extends State<SplashScreen>
       final prefs = await SharedPreferences.getInstance();
 
       // One-time fresh start wipe: clear local cache & active session
-      final hasCompletedFreshStart = prefs.getBool('fresh_start_v4') ?? false;
+      final hasCompletedFreshStart = prefs.getBool('fresh_start_clean_v6') ?? false;
       if (!hasCompletedFreshStart) {
         await prefs.clear();
-        await prefs.setBool('fresh_start_v4', true);
+        await prefs.setBool('fresh_start_clean_v6', true);
         try {
           await Supabase.instance.client.auth.signOut();
         } catch (_) {}
