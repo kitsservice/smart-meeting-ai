@@ -469,32 +469,7 @@ class ApiService {
       descWithMembers = '$descWithMembers [MEMBERS:$membersJson]'.trim();
     }
 
-    final url = Uri.parse('$baseUrl/meetings/');
-
-    try {
-      final response = await _client
-          .post(
-            url,
-            headers: _getHeaders(),
-            body: jsonEncode({
-              'title': title,
-              'description': descWithMembers,
-              'user_id': userId,
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return data['id']; // Return the meeting ID for audio upload
-      } else {
-        debugPrint('Failed to save meeting via backend: ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('Backend save failed, attempting direct Supabase insert: $e');
-    }
-
-    // Direct Supabase fallback: Guarantee meeting is ALWAYS created under this user_id
+    // 1. Authoritative direct Supabase insert: instant (~40ms) with zero server latency
     try {
       final response = await Supabase.instance.client
           .from('meetings')
@@ -507,7 +482,30 @@ class ApiService {
           .single();
       return response['id'];
     } catch (e) {
-      debugPrint('Direct Supabase insert error: $e');
+      debugPrint('Direct Supabase insert error: $e, falling back to backend...');
+    }
+
+    // 2. Resilient fallback to backend API
+    final url = Uri.parse('$baseUrl/meetings/');
+    try {
+      final response = await _client
+          .post(
+            url,
+            headers: _getHeaders(),
+            body: jsonEncode({
+              'title': title,
+              'description': descWithMembers,
+              'user_id': userId,
+            }),
+          )
+          .timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return data['id'];
+      }
+    } catch (e) {
+      debugPrint('Backend save failed: $e');
     }
 
     return null;
@@ -955,10 +953,10 @@ class ApiService {
         // Attach the audio file
         request.files.add(await http.MultipartFile.fromPath('file', filePath));
 
-        // Generous timeout to allow neural embedding extraction on cloud servers
+        // Responsive timeout: if backend is slow, fallback to instant direct Supabase save
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 35));
+            .timeout(const Duration(seconds: 8));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {
@@ -1085,7 +1083,7 @@ class ApiService {
 
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 45));
+            .timeout(const Duration(seconds: 8));
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode == 200) {
